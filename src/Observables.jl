@@ -24,7 +24,8 @@ type Observable{T}
     val::T
     listeners::Vector
 end
-Observable(val) = Observable(val, Any[])
+(::Type{Observable{T}}){T}(val) = Observable{T}(val, Any[])
+Observable{T}(val::T) = Observable{T}(val)
 
 """
     on(f, oref::Observable)
