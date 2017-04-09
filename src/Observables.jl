@@ -35,7 +35,7 @@ is set via `oref[] = val` `f` is called with `val`.
 """
 function on(f, ob::Observable)
     push!(ob.listeners, f)
-    nothing
+    f
 end
 
 """

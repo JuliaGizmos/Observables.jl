@@ -6,12 +6,11 @@ using Base.Test
     @test r[] == 0
     r[] = 1
     @test r[] == 1
-    f = function (x)
+
+    f = on(r) do x
         r[] == 2
         @test x == 2
     end
-
-    on(f, r)
     r[] = 2
 
     off(r, f)
