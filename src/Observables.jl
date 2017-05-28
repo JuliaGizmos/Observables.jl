@@ -65,6 +65,15 @@ function Base.setindex!(ob::Observable, val)
     end
 end
 
+function setexcludinghandlers(ob::Observable, val, pred=x->true)
+    ob.val = val
+    for f in ob.listeners
+        if pred(f)
+            f(val)
+        end
+    end
+end
+
 """
     oref[]
 
