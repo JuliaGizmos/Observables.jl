@@ -3,6 +3,8 @@
 Observables are like `Ref`s but you can listen to changes.
 
 ```@repl manual
+using Observables
+
 observable = Observable(0)
 
 h = on(observable) do val
