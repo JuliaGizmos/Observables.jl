@@ -2,6 +2,12 @@ module Observables
 
 export Observable, on, off, onany, connect!
 
+if isdefined(Base, :Iterators) && isdefined(Base.Iterators, :filter)
+    import Base.Iterators.filter
+else
+    import Base.filter
+end
+
 """
 Like a `Ref` but updates can be watched by adding a handler using `on`.
 """
