@@ -43,3 +43,35 @@ end
     r1[] = 3
     @test r2[] == 4
 end
+
+signal_ran = false
+
+@testset "signals" begin
+    using Observables.Signals
+
+    # Signal with 0 arguments
+    s0 = Signal{0}()
+
+    # Function to call
+    function slot0()
+        global signal_ran
+        signal_ran = true
+    end
+
+    # Connect and then call
+    Signals.connect!(s0,slot0)
+    emit(s0)
+
+    # Test that the global variable changed
+    @test signal_ran
+
+    s2 = Signal{2}()
+
+    function slot2(x,y)
+        @test x == 1
+        @test y == "test"
+    end
+
+    Signals.connect!(s2,slot2)
+    emit(s2,1,"test")
+end

@@ -131,4 +131,6 @@ end
 
 # TODO: overload broadcast on v0.6
 
+include("Signals.jl")
+
 end # module
