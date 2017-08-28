@@ -129,6 +129,8 @@ function Base.map(f, o::Observable, os...; init=f(o[], map(_val, os)...))
     map!(f, Observable(init), o, os...)
 end
 
+Base.eltype{T}(::Observable{T}) = T
+
 # TODO: overload broadcast on v0.6
 
 end # module
