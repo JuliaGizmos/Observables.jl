@@ -1,6 +1,6 @@
 module Observables
 
-export Observable, on, off, onany, connect!
+export Observable, on, off, onany, connect!, obsid
 
 if isdefined(Base, :Iterators) && isdefined(Base.Iterators, :filter)
     import Base.Iterators.filter
@@ -12,11 +12,19 @@ end
 Like a `Ref` but updates can be watched by adding a handler using `on`.
 """
 type Observable{T}
+    id::String
     val::T
     listeners::Vector
 end
-(::Type{Observable{T}}){T}(val) = Observable{T}(val, Any[])
+(::Type{Observable{T}}){T}(val) = Observable{T}(newid(), val, Any[])
 Observable{T}(val::T) = Observable{T}(val)
+
+let count=0
+    global newid
+    function newid(prefix="ob_")
+        string(prefix, lpad(count += 1, 2, "0"))
+    end
+end
 
 """
     on(f, o::Observable)
@@ -77,6 +85,8 @@ Base.getindex(o::Observable) = o.val
 
 _val(o::Observable) = o[]
 _val(x) = x
+
+obsid(o::Observable) = o.id
 
 """
     onany(f, args...)
