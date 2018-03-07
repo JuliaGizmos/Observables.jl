@@ -8,6 +8,9 @@ else
     import Base.filter
 end
 
+const addhandler_callbacks = []
+const removehandler_callbacks = []
+
 """
 Like a `Ref` but updates can be watched by adding a handler using `on`.
 """
@@ -34,6 +37,9 @@ is set via `o[] = val` `f` is called with `val`.
 """
 function on(f, o::Observable)
     push!(o.listeners, f)
+    for g in addhandler_callbacks
+        g(f, o)
+    end
     f
 end
 
@@ -46,6 +52,9 @@ function off(o::Observable, f)
     for i in 1:length(o.listeners)
         if f === o.listeners[i]
             deleteat!(o.listeners, i)
+            for g in removehandler_callbacks
+                g(o, f)
+            end
             return
         end
     end
