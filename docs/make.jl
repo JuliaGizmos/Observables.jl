@@ -10,6 +10,7 @@ makedocs(
 )
 
 deploydocs(
+    julia = "nightly",
     repo = "github.com/JuliaGizmos/Observables.jl.git",
     target = "build",
     deps = nothing,
