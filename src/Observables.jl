@@ -1,6 +1,6 @@
 module Observables
 
-export Observable, on, off, onany, connect!, obsid
+export Observable, on, off, onany, connect!, obsid, throttle
 
 if isdefined(Base, :Iterators) && isdefined(Base.Iterators, :filter)
     import Base.Iterators.filter
@@ -151,5 +151,7 @@ end
 Base.eltype{T}(::Observable{T}) = T
 
 # TODO: overload broadcast on v0.6
+
+include("time.jl")
 
 end # module

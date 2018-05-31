@@ -43,3 +43,14 @@ end
     r1[] = 3
     @test r2[] == 4
 end
+
+@testset "throttle" begin
+    obs = Observable(1)
+    throttled = throttle(10, obs)
+    @test throttled[] == 1
+    obs[] = 2
+    sleep(5)
+    @test throttled[] == 1
+    sleep(10)
+    @test throttled[] == 2
+end
