@@ -14,13 +14,13 @@ const removehandler_callbacks = []
 """
 Like a `Ref` but updates can be watched by adding a handler using `on`.
 """
-type Observable{T}
+mutable struct Observable{T}
     id::String
     val::T
     listeners::Vector
 end
-(::Type{Observable{T}}){T}(val) = Observable{T}(newid(), val, Any[])
-Observable{T}(val::T) = Observable{T}(val)
+Observable{T}(val) where {T} = Observable{T}(newid(), val, Any[])
+Observable(val::T) where {T} = Observable{T}(val)
 
 let count=0
     global newid
@@ -148,7 +148,7 @@ function Base.map(f, o::Observable, os...; init=f(o[], map(_val, os)...))
     map!(f, Observable(init), o, os...)
 end
 
-Base.eltype{T}(::Observable{T}) = T
+Base.eltype(::Observable{T}) where {T} = T
 
 # TODO: overload broadcast on v0.6
 
