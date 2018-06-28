@@ -6,9 +6,13 @@ the last update of the `input` signal during each `dt` second time window.
 """
 function throttle(dt, obs::Observable{T}) where {T}
     throttled = Observable{T}(obs[])
-    @async while true
-        sleep(dt)
-        (obs[] != throttled[]) && (throttled[] = obs[])
+    updatable = Observable(true)
+    set_throttled(val) = (throttled[] != val) && (throttled[] = val; updatable[] = false)
+    on(updatable) do val
+        val ? set_throttled(obs[]) : Timer(t -> updatable[] = true, dt)
+    end
+    on(obs) do val
+        updatable[] && set_throttled(val)
     end
     throttled
 end
