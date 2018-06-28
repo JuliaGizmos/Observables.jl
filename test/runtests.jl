@@ -49,8 +49,11 @@ end
     throttled = throttle(10, obs)
     @test throttled[] == 1
     obs[] = 2
-    sleep(5)
-    @test throttled[] == 1
-    sleep(10)
+    sleep(0.1)
     @test throttled[] == 2
+    obs[] = 3
+    sleep(5)
+    @test throttled[] == 2
+    sleep(10)
+    @test throttled[] == 3
 end
