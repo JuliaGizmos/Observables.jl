@@ -1,3 +1,5 @@
+__precompile__()
+
 module Observables
 
 export Observable, on, off, onany, connect!, obsid
