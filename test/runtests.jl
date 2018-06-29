@@ -43,3 +43,48 @@ end
     r1[] = 3
     @test r2[] == 4
 end
+
+@testset "async_latest" begin
+    o = Observable(0)
+    cnt = Ref(0)
+    function compute_something(x)
+        for i=1:10^7; rand() end
+        cnt[] = cnt[] + 1
+    end
+    o_latest = async_latest(o, 1)
+
+    on(compute_something, o_latest) # compute something on the latest update
+    for i=1:5
+        o[] = i
+    end
+    sleep(1)
+
+    @test o_latest[] == 5
+    @test cnt[] == 1
+
+    for i=5:-1:1
+        @async o[] = i
+    end
+    sleep(1)
+
+    @test o_latest[] == 1
+    @test cnt[] == 2 # only one more
+
+    o = Observable(0)
+    cnt[] = 0
+    function compute_something(x)
+        for i=1:10^8; rand() end
+        cnt[] = cnt[] + 1
+    end
+    sleep(1)
+    o_latest = async_latest(o, 3)
+
+    on(compute_something, o_latest) # compute something on the latest update
+    for i=1:5
+        o[] = i
+    end
+    sleep(.1)
+
+    @test o_latest[] == 5
+    @test cnt[] == 3
+end
