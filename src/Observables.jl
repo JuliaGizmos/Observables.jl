@@ -2,7 +2,7 @@ __precompile__()
 
 module Observables
 
-export Observable, on, off, onany, connect!, obsid, throttle
+export Observable, on, off, onany, connect!, obsid, async_latest, throttle
 
 if isdefined(Base, :Iterators) && isdefined(Base.Iterators, :filter)
     import Base.Iterators.filter
@@ -151,6 +151,72 @@ function Base.map(f, o::Observable, os...; init=f(o[], map(_val, os)...))
 end
 
 Base.eltype(::Observable{T}) where {T} = T
+
+"""
+`async_latest(o::Observable, n=1)`
+
+Returns an `Observable` which drops all but
+the last `n` updates to `o` if processing the updates
+takes longer than the interval between updates.
+
+This is useful if you want to pass the updates from,
+say, a slider to a plotting function that takes a while to
+compute. The plot will directly compute the last frame
+skipping the intermediate ones.
+
+# Example:
+```
+o = Observable(0)
+function compute_something(x)
+    for i=1:10^8 rand() end # simulate something expensive
+    println("updated with \$x")
+end
+o_latest = async_latest(o, 1)
+on(compute_something, o_latest) # compute something on the latest update
+
+for i=1:5
+    o[] = i
+end
+```
+"""
+function async_latest(input::Observable{T}, n=1) where T
+    buffer = T[]
+    cond = Condition()
+    lck  = ReentrantLock() # advisory lock for access to buffer
+    output = Observable{T}(input[]) # output
+
+    @async while true
+        while true # while !isempty(buffer) but with a lock
+            # transact a pop
+            lock(lck)
+            if isempty(buffer)
+                unlock(lck)
+                break
+            end
+            upd = pop!(buffer)
+            unlock(lck)
+
+            output[] = upd
+        end
+        wait(cond)
+    end
+
+    on(input) do val
+        lock(lck)
+        if length(buffer) < n
+            push!(buffer, val)
+        else
+            while length(buffer) >= n
+                pop!(buffer)
+            end
+            unshift!(buffer, val)
+        end
+        unlock(lck)
+        notify(cond)
+    end
+
+    output
+end
 
 # TODO: overload broadcast on v0.6
 
