@@ -88,3 +88,17 @@ end
     @test o_latest[] == 5
     @test cnt[] == 3
 end
+
+@testset "throttle" begin
+    obs = Observable(1)
+    throttled = throttle(2, obs)
+    @test throttled[] == 1
+    obs[] = 2
+    sleep(0.1)
+    @test throttled[] == 2
+    obs[] = 3
+    sleep(1)
+    @test throttled[] == 2
+    sleep(2)
+    @test throttled[] == 3
+end
