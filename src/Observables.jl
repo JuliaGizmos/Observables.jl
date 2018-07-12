@@ -147,7 +147,7 @@ dispatch reasons. `args` may contain any number of `Observable` ojects.
 All other ojects in `args` are passed as-is.
 """
 function Base.map(f, o::Observable, os...; init=f(o[], map(_val, os)...))
-    map!(f, Observable(init), o, os...)
+    map!(f, Observable{Any}(init), o, os...)
 end
 
 Base.eltype(::Observable{T}) where {T} = T
