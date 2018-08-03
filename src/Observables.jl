@@ -1,8 +1,10 @@
-__precompile__()
+VERSION < v"0.7.0-beta2.199" && __precompile__()
 
 module Observables
 
 export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+
+using Compat
 
 if isdefined(Base, :Iterators) && isdefined(Base.Iterators, :filter)
     import Base.Iterators.filter
@@ -209,7 +211,7 @@ function async_latest(input::Observable{T}, n=1) where T
             while length(buffer) >= n
                 pop!(buffer)
             end
-            unshift!(buffer, val)
+            Compat.pushfirst!(buffer, val)
         end
         unlock(lck)
         notify(cond)
