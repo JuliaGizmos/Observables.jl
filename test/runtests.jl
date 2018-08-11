@@ -1,5 +1,5 @@
 using Observables
-using Base.Test
+using Test
 
 @testset "listeners" begin
     r = Observable(0)
