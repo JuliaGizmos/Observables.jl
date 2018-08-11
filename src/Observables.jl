@@ -209,7 +209,7 @@ function async_latest(input::Observable{T}, n=1) where T
             while length(buffer) >= n
                 pop!(buffer)
             end
-            unshift!(buffer, val)
+            pushfirst!(buffer, val)
         end
         unlock(lck)
         notify(cond)
