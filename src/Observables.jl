@@ -2,6 +2,8 @@ __precompile__()
 
 module Observables
 
+using DataStructures
+
 export Observable, on, off, onany, connect!, obsid, async_latest, throttle
 
 if isdefined(Base, :Iterators) && isdefined(Base.Iterators, :filter)
@@ -231,5 +233,6 @@ end
 # TODO: overload broadcast on v0.6
 
 include("time.jl")
+include("macros.jl")
 
 end # module
