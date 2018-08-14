@@ -102,3 +102,14 @@ end
     sleep(2)
     @test throttled[] == 3
 end
+
+struct A<:Observables.AbstractObservable{Int}; end
+
+@testset "interface" begin
+    a = A()
+    @test_throws ErrorException a[]
+    @test_throws ErrorException a[] = 2
+    @test_throws ErrorException Observables.obsid(a)
+    @test_throws ErrorException Observables.listeners(a)
+    @test eltype(a) == Int
+end
