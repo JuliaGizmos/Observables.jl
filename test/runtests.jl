@@ -105,6 +105,12 @@ end
 
 struct A<:Observables.AbstractObservable{Int}; end
 
+struct B{T}<:Observables.AbstractObservable{T}
+    output::Observable{T}
+end
+
+Observables.observe(b::B) = b.output
+
 @testset "interface" begin
     a = A()
     @test_throws ErrorException a[]
@@ -112,4 +118,12 @@ struct A<:Observables.AbstractObservable{Int}; end
     @test_throws ErrorException Observables.obsid(a)
     @test_throws ErrorException Observables.listeners(a)
     @test eltype(a) == Int
+
+    b = B(Observable("test"))
+    @test b[] == "test"
+    b[] = "test2"
+    sleep(0.1)
+    @test b[] == "test2"
+    @test isempty(Observables.listeners(b))
+    @test eltype(b) == String
 end

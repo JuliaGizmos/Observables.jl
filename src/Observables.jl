@@ -15,20 +15,8 @@ const removehandler_callbacks = []
 
 abstract type AbstractObservable{T}; end
 
-function Base.getindex(::S) where {S<:AbstractObservable}
-    error("getindex not defined for AbstractObservable $S")
-end
-
-function Base.setindex!(::S, val; notify=x->true) where {S<:AbstractObservable}
-    error("setindex! not defined for AbstractObservable $S")
-end
-
-function obsid(::S) where {S<:AbstractObservable}
-    error("obsid not defined for AbstractObservable $S")
-end
-
-function listeners(::S) where {S<:AbstractObservable}
-    error("listeners not defined for AbstractObservable $S")
+function observe(::S) where {S<:AbstractObservable}
+    error("observe not defined for AbstractObservable $S")
 end
 
 """
@@ -95,6 +83,9 @@ function Base.setindex!(o::Observable, val; notify=x->true)
     end
 end
 
+Base.setindex!(o::AbstractObservable, val; notify=x->true) =
+    Base.setindex!(observe(o), val; notify=notify)
+
 setexcludinghandlers(o::AbstractObservable, val, pred=x->true) =
     setindex!(o, val; notify=pred)
 
@@ -105,6 +96,7 @@ Returns the current value of `o`.
 """
 Base.getindex(o::Observable) = o.val
 
+Base.getindex(o::AbstractObservable) = getindex(observe(o))
 
 ### Utilities
 
@@ -112,8 +104,10 @@ _val(o::AbstractObservable) = o[]
 _val(x) = x
 
 obsid(o::Observable) = o.id
+obsid(o::AbstractObservable) = obsid(observe(o))
 
 listeners(o::Observable) = o.listeners
+listeners(o::AbstractObservable) = listeners(observe(o))
 
 """
     onany(f, args...)
