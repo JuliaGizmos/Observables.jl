@@ -50,12 +50,12 @@ let count=0
 end
 
 """
-    on(f, o::Observable)
+    on(f, o::AbstractObservable)
 
 Adds function `f` as listener to `o`. Whenever `o`'s value
 is set via `o[] = val` `f` is called with `val`.
 """
-function on(f, o::Observable)
+function on(f, o::AbstractObservable)
     push!(listeners(o), f)
     for g in addhandler_callbacks
         g(f, o)
@@ -64,11 +64,11 @@ function on(f, o::Observable)
 end
 
 """
-    off(o::Observable, f)
+    off(o::AbstractObservable, f)
 
 Removes `f` from listeners of `o`.
 """
-function off(o::Observable, f)
+function off(o::AbstractObservable, f)
     for i in 1:length(listeners(o))
         if f === listeners(o)[i]
             deleteat!(listeners(o), i)
