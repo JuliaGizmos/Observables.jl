@@ -44,6 +44,27 @@ end
     @test r2[] == 4
 end
 
+@testset "macros" begin
+    a = Observable(2)
+    b = Observable(3)
+    c = Observables.@map &a + &b
+    @test c isa Observable
+    @test c[] == 5
+    a[] = 100
+    sleep(0.1)
+    @test c[] == 103
+
+    a = Observable(2)
+    b = Observable(3)
+    c = Observable(10)
+    Observables.@map! c &a + &b
+    sleep(0.1)
+    @test c[] == 10
+    a[] = 100
+    sleep(0.1)
+    @test c[] == 103
+end
+
 @testset "async_latest" begin
     o = Observable(0)
     cnt = Ref(0)

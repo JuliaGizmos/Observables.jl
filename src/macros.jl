@@ -1,6 +1,6 @@
 function parse_function_call(x)
-    syms = OrderedDict()
-    res = parse_function_call!(syms, expr)
+    syms = Dict()
+    res = parse_function_call!(syms, x)
     func = Expr(:(->), Expr(:tuple, values(syms)...), res)
     return func, syms
 end
@@ -20,6 +20,31 @@ function map_helper(expr)
     Expr(:call, :map, func, keys(syms)...)
 end
 
+"""
+`@map(x)`
+
+Wrap `Observables` in `&` to compute an expression using their value: the expression will update automatically
+as the `Observables` are updated.
+
+## Examples
+
+```jldoctest map
+julia> a = Observable(2);
+
+julia> b = Observable(3);
+
+julia> c = Observables.@map &a + &b;
+
+julia> c[]
+5
+
+julia> a[] = 100
+100
+
+julia> c[]
+103
+```
+"""
 macro map(expr)
     esc(map_helper(expr))
 end
@@ -29,6 +54,33 @@ function map!_helper(d, expr)
     Expr(:call, :map!, func, d, keys(syms)...)
 end
 
+"""
+`@map!(d, expr)`
+
+Wrap `Observables` in `&` to compute an expression `expr` using their value: the expression will update automatically
+as the `Observables` are updated and `d` will be set to match that value.
+
+## Examples
+
+```jldoctest map
+julia> a = Observable(2);
+
+julia> b = Observable(3);
+
+julia> c = Observable(10);
+
+julia> Observables.@map! c &a + &b;
+
+julia> c[]
+10
+
+julia> a[] = 100
+100
+
+julia> c[]
+103
+```
+"""
 macro map!(d, expr)
     esc(map!_helper(d, expr))
 end
