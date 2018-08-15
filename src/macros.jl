@@ -21,14 +21,14 @@ function map_helper(expr)
 end
 
 """
-`@map(x)`
+`@map(expr)`
 
-Wrap `Observables` in `&` to compute an expression using their value: the expression will update automatically
-as the `Observables` are updated.
+Wrap `AbstractObservables` in `&` to compute expression `expr` using their value. The expression will be
+computed when `@map` is called and  every time the `AbstractObservables` are updated.
 
 ## Examples
 
-```jldoctest map
+```jldoctest mapmacro
 julia> a = Observable(2);
 
 julia> b = Observable(3);
@@ -57,12 +57,12 @@ end
 """
 `@map!(d, expr)`
 
-Wrap `Observables` in `&` to compute an expression `expr` using their value: the expression will update automatically
-as the `Observables` are updated and `d` will be set to match that value.
+Wrap `AbstractObservables` in `&` to compute expression `expr` using their value: the expression will be
+computed every time the `AbstractObservables` are updated and `d` will be set to match that value.
 
 ## Examples
 
-```jldoctest map
+```jldoctest mapmacro
 julia> a = Observable(2);
 
 julia> b = Observable(3);
@@ -87,9 +87,28 @@ end
 
 function on_helper(expr)
     func, syms = parse_function_call(expr)
-    Expr(:call, :(Observables.on), func, keys(syms)...)
+    Expr(:call, :(Observables.onany), func, keys(syms)...)
 end
 
+"""
+`@on(expr)`
+
+Wrap `AbstractObservables` in `&` to execute expression `expr` using their value. The expression will be
+computed every time the `AbstractObservables` are updated.
+
+## Examples
+
+```jldoctest onmacro
+julia> a = Observable(2);
+
+julia> b = Observable(3);
+
+julia> Observables.@on println("The sum of a+b is \$(&a + &b)");
+
+julia> a[] = 100;
+The sum of a+b is 103
+```
+"""
 macro on(expr)
     esc(on_helper(expr))
 end
