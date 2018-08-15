@@ -232,6 +232,8 @@ end
 
 # TODO: overload broadcast on v0.6
 
+include("observablepair.jl")
+include("flatten.jl")
 include("time.jl")
 include("macros.jl")
 
