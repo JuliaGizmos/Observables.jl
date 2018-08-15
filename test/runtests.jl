@@ -63,6 +63,16 @@ end
     a[] = 100
     sleep(0.1)
     @test c[] == 103
+
+    a = Observable(2)
+    b = Observable(3)
+    c = Observable(10)
+    Observables.@on c[] = &a + &b
+    sleep(0.1)
+    @test c[] == 10
+    a[] = 100
+    sleep(0.1)
+    @test c[] == 103
 end
 
 @testset "async_latest" begin
