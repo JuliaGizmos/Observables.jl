@@ -13,10 +13,16 @@ end
 const addhandler_callbacks = []
 const removehandler_callbacks = []
 
+abstract type AbstractObservable{T}; end
+
+function observe(::S) where {S<:AbstractObservable}
+    error("observe not defined for AbstractObservable $S")
+end
+
 """
 Like a `Ref` but updates can be watched by adding a handler using `on`.
 """
-mutable struct Observable{T}
+mutable struct Observable{T} <: AbstractObservable{T}
     id::String
     val::T
     listeners::Vector
@@ -32,13 +38,13 @@ let count=0
 end
 
 """
-    on(f, o::Observable)
+    on(f, o::AbstractObservable)
 
 Adds function `f` as listener to `o`. Whenever `o`'s value
 is set via `o[] = val` `f` is called with `val`.
 """
-function on(f, o::Observable)
-    push!(o.listeners, f)
+function on(f, o::AbstractObservable)
+    push!(listeners(o), f)
     for g in addhandler_callbacks
         g(f, o)
     end
@@ -46,14 +52,14 @@ function on(f, o::Observable)
 end
 
 """
-    off(o::Observable, f)
+    off(o::AbstractObservable, f)
 
 Removes `f` from listeners of `o`.
 """
-function off(o::Observable, f)
-    for i in 1:length(o.listeners)
-        if f === o.listeners[i]
-            deleteat!(o.listeners, i)
+function off(o::AbstractObservable, f)
+    for i in 1:length(listeners(o))
+        if f === listeners(o)[i]
+            deleteat!(listeners(o), i)
             for g in removehandler_callbacks
                 g(o, f)
             end
@@ -68,21 +74,20 @@ end
 
 Updates the value of an `Observable` to `val` and call its listeners.
 """
-function Base.setindex!(o::Observable, val)
+function Base.setindex!(o::Observable, val; notify=x->true)
     o.val = val
-    for f in o.listeners
-        f(val)
-    end
-end
-
-function setexcludinghandlers(o::Observable, val, pred=x->true)
-    o.val = val
-    for f in o.listeners
-        if pred(f)
+    for f in listeners(o)
+        if notify(f)
             f(val)
         end
     end
 end
+
+Base.setindex!(o::AbstractObservable, val; notify=x->true) =
+    Base.setindex!(observe(o), val; notify=notify)
+
+setexcludinghandlers(o::AbstractObservable, val, pred=x->true) =
+    setindex!(o, val; notify=pred)
 
 """
     o[]
@@ -91,13 +96,18 @@ Returns the current value of `o`.
 """
 Base.getindex(o::Observable) = o.val
 
+Base.getindex(o::AbstractObservable) = getindex(observe(o))
 
 ### Utilities
 
-_val(o::Observable) = o[]
+_val(o::AbstractObservable) = o[]
 _val(x) = x
 
 obsid(o::Observable) = o.id
+obsid(o::AbstractObservable) = obsid(observe(o))
+
+listeners(o::Observable) = o.listeners
+listeners(o::AbstractObservable) = listeners(observe(o))
 
 """
     onany(f, args...)
@@ -108,7 +118,7 @@ Calls `f` on updates to any oservable refs in `args`.
 All other ojects in `args` are passed as-is.
 """
 function onany(f, os...)
-    oservs = filter(x->isa(x, Observable), os)
+    oservs = filter(x->isa(x, AbstractObservable), os)
     g(_) = f(map(_val, os)...)
     for o in oservs
         on(g, o)
@@ -123,7 +133,7 @@ Updates `o` with the result of calling `f` with values extracted from args.
 `f` will be passed the values contained in the refs as the respective argument.
 All other ojects in `args` are passed as-is.
 """
-function Base.map!(f, o::Observable, os...)
+function Base.map!(f, o::AbstractObservable, os...)
     onany(os...) do val...
         o[] = f(val...)
     end
@@ -135,7 +145,7 @@ end
 
 Forward all updates to `o1` to `o2`
 """
-connect!(o1::Observable, o2::Observable) = map!(identity, o2, o1)
+connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o2, o1)
 
 """
     map(f, o::Observable, args...)
@@ -146,14 +156,14 @@ dispatch reasons. `args` may contain any number of `Observable` ojects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other ojects in `args` are passed as-is.
 """
-function Base.map(f, o::Observable, os...; init=f(o[], map(_val, os)...))
+function Base.map(f, o::AbstractObservable, os...; init=f(o[], map(_val, os)...))
     map!(f, Observable{Any}(init), o, os...)
 end
 
-Base.eltype(::Observable{T}) where {T} = T
+Base.eltype(::AbstractObservable{T}) where {T} = T
 
 """
-`async_latest(o::Observable, n=1)`
+`async_latest(o::AbstractObservable, n=1)`
 
 Returns an `Observable` which drops all but
 the last `n` updates to `o` if processing the updates
@@ -179,7 +189,7 @@ for i=1:5
 end
 ```
 """
-function async_latest(input::Observable{T}, n=1) where T
+function async_latest(input::AbstractObservable{T}, n=1) where T
     buffer = T[]
     cond = Condition()
     lck  = ReentrantLock() # advisory lock for access to buffer
