@@ -231,5 +231,6 @@ end
 # TODO: overload broadcast on v0.6
 
 include("time.jl")
+include("macros.jl")
 
 end # module

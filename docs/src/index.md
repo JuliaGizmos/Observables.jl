@@ -40,7 +40,10 @@ off(o::Observable, f)
 Base.setindex!(o::Observable, val)
 Base.getindex(o::Observable)
 onany(f, os...)
+Observables.@on
 Base.map!(f, o::Observable, os...)
+Observables.@map!
 connect!(o1::Observable, o2::Observable)
 Base.map(f, o::Observable, os...; init)
+Observables.@map
 ```
