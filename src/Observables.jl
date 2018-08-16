@@ -30,6 +30,8 @@ end
 Observable{T}(val) where {T} = Observable{T}(newid(), val, Any[])
 Observable(val::T) where {T} = Observable{T}(val)
 
+observe(x::Observable) = x
+
 let count=0
     global newid
     function newid(prefix="ob_")
