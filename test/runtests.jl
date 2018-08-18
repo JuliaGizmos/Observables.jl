@@ -179,4 +179,11 @@ end
     obs[] = Observable(11)
     sleep(0.1)
     @test o2[] == 11
+
+    obs = Observable(Observable(Observable(10)))
+    o2 = Observables.flatten(obs)
+    @test o2[] == 10
+
+    obs[] = Observable(Observable(13))
+    @test o2[] == 13
 end
