@@ -158,3 +158,32 @@ Observables.observe(b::B) = b.output
     @test isempty(Observables.listeners(b))
     @test eltype(b) == String
 end
+
+@testset "pair" begin
+    v = Observables.ObservablePair(Observable(1.0), f = exp, g = log)
+    @test v.second[] ≈ ℯ
+    v.first[] = 0
+    @test v.second[] ≈ 1
+    v.second[] = 2
+    @test v.first[] ≈ log(2)
+
+    obs = Observable(Observable(2))
+    o2 = Observables.flatten(obs)
+
+    o2[] = 12
+    sleep(0.1)
+    @test obs[][] == 12
+    obs[][] = 22
+    sleep(0.1)
+    @test o2[] == 22
+    obs[] = Observable(11)
+    sleep(0.1)
+    @test o2[] == 11
+
+    obs = Observable(Observable(Observable(10)))
+    o2 = Observables.flatten(obs)
+    @test o2[] == 10
+
+    obs[] = Observable(Observable(13))
+    @test o2[] == 13
+end
