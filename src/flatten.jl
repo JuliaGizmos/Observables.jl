@@ -1,17 +1,22 @@
-mutable struct Unwrap <: AbstractObservable{AbstractObservable}
+mutable struct Flatten <: AbstractObservable{Any}
     o::AbstractObservable
-    obs_inner::Observable{AbstractObservable}
-    pair::Union{ObservablePair, Nothing}
-    function Unwrap(o, obs_inner=Observable{AbstractObservable}(inner_observable(o)))
-        n = new(o, obs_inner, nothing)
+    inner_id::String
+    output::Observable{Any}
+    pair::ObservablePair
+    function Flatten(o)
+        inner_obs = inner_observable(o)
+        inner_id = obsid(inner_obs)
+        output = Observable{Any}(inner_obs[])
+        p = ObservablePair(inner_obs, output)
+        n = new(o, inner_id, output, p)
         recursive_connect!(o, n)
         n
     end
 end
 
-observe(o::Unwrap) = o.obs_inner
+observe(o::Flatten) = o.output
 
-function Base.iterate(u::Unwrap, i = u.o)
+function Base.iterate(u::Flatten, i = u.o)
     i isa AbstractObservable ? (i, i[]) : nothing
 end
 
@@ -22,27 +27,21 @@ function inner_observable(o::AbstractObservable)
     o
 end
 
-recursive_connect!(i, f::Unwrap) = nothing
-function recursive_connect!(i::AbstractObservable, f::Unwrap)
+recursive_connect!(i, f::Flatten) = nothing
+function recursive_connect!(i::AbstractObservable, f::Flatten)
     on(i) do val
         if val isa AbstractObservable && i in f
-            inner = inner_observable(val)
-            (obsid(inner) != obsid(f[])) && (f[] = inner)
+            inner_obs = inner_observable(val)
+            if obsid(inner_obs) != f.inner_id
+                off(f.pair)
+                f[] = inner_obs[]
+                f.pair = ObservablePair(inner_obs, f.output)
+                f.inner_id = obsid(inner_obs)
+            end
             recursive_connect!(val, f)
         end
     end
 end
 
 flatten(x) = x
-flatten(obs::AbstractObservable) = flatten(Unwrap(obs))
-function flatten(u::Unwrap)
-    obs1 = u[]
-    obs2 = Observable{Any}(obs1[])
-    u.pair = ObservablePair(obs1, obs2)
-    on(u) do val
-        off(u.pair)
-        obs2[] = val[]
-        u.pair = ObservablePair(val, obs2)
-    end
-    obs2
-end
+flatten(obs::AbstractObservable) = Flatten(obs)
