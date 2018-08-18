@@ -4,11 +4,7 @@ module Observables
 
 export Observable, on, off, onany, connect!, obsid, async_latest, throttle
 
-if isdefined(Base, :Iterators) && isdefined(Base.Iterators, :filter)
-    import Base.Iterators.filter
-else
-    import Base.filter
-end
+import Base.Iterators.filter
 
 const addhandler_callbacks = []
 const removehandler_callbacks = []
