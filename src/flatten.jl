@@ -1,8 +1,9 @@
-struct Nested{T<:AbstractObservable}
+struct Nested{T}
     o::T
 end
 
-Base.iterate(u::Nested, i = u.o) = i isa AbstractObservable ? (i, i[]) : nothing
+Base.iterate(u::Nested{<:AbstractObservable}, i = u.o) = i isa AbstractObservable ? (i, i[]) : nothing
+Base.iterate(u::Nested) = nothing
 
 mutable struct Flatten <: AbstractObservable{Any}
     o::AbstractObservable
@@ -28,6 +29,8 @@ end
 flatten(x) = x
 flatten(obs::AbstractObservable) = Flatten(obs)
 
+observe(o::Flatten) = o.output
+
 function updater(i, f::Flatten)
     function (val)
         ind = findfirst(t -> obsid(t[1]) == obsid(i), f.list)
@@ -36,11 +39,10 @@ function updater(i, f::Flatten)
                 obs, func = pop!(f.list)
                 off(obs, func)
             end
-            while val isa AbstractObservable
-                func = updater(val, f)
-                on(func, val)
-                push!(f.list, (val, func))
-                i, val = val, i[]
+            for outer i in Nested(val)
+                func = updater(i, f)
+                on(func, i)
+                push!(f.list, (i, func))
             end
             if obsid(i) != f.inner_id
                 off(f.pair)
@@ -51,5 +53,3 @@ function updater(i, f::Flatten)
         end
     end
 end
-
-observe(o::Flatten) = o.output
