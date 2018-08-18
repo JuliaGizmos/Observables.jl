@@ -26,7 +26,7 @@ mutable struct Flatten <: AbstractObservable{Any}
 end
 
 flatten(x) = x
-flatten(obs::AbstractObservable) = Flatten(obs)
+flatten(obs::AbstractObservable) = observe(Flatten(obs))
 
 observe(o::Flatten) = o.output
 
