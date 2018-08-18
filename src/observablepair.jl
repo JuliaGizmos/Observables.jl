@@ -1,4 +1,4 @@
-struct ObservablePair{S, T}
+struct ObservablePair{S, T} <: AbstractObservable{T}
     first::AbstractObservable{S}
     second::AbstractObservable{T}
     f
@@ -20,6 +20,8 @@ end
 
 ObservablePair(first::AbstractObservable; f = identity, g = identity) =
     ObservablePair(first, Observable{Any}(f(first[])); f = f, g = g)
+
+observe(o::ObservablePair) = o.second
 
 function off(o::ObservablePair)
     for i in 1:2
