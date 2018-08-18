@@ -1,3 +1,9 @@
+struct Nested{T<:AbstractObservable}
+    o::T
+end
+
+Base.iterate(u::Nested, i = u.o) = i isa AbstractObservable ? (i, i[]) : nothing
+
 mutable struct Flatten <: AbstractObservable{Any}
     o::AbstractObservable
     list::Vector{Tuple{AbstractObservable, Function}}
@@ -5,12 +11,12 @@ mutable struct Flatten <: AbstractObservable{Any}
     output::Observable{Any}
     pair::ObservablePair
     function Flatten(o)
-        inner_obs = inner_observable(o)
+        inner_obs = foldl((x,y)->y, Nested(o))
         inner_id = obsid(inner_obs)
         output = Observable{Any}(inner_obs[])
         p = ObservablePair(inner_obs, output)
         n = new(o, Tuple{AbstractObservable, Function}[], inner_id, output, p)
-        for i in n
+        for i in Nested(o)
             f = updater(i, n)
             on(f, i)
             push!(n.list, (i, f))
@@ -18,6 +24,9 @@ mutable struct Flatten <: AbstractObservable{Any}
         n
     end
 end
+
+flatten(x) = x
+flatten(obs::AbstractObservable) = Flatten(obs)
 
 function updater(i, f::Flatten)
     function (val)
@@ -44,17 +53,3 @@ function updater(i, f::Flatten)
 end
 
 observe(o::Flatten) = o.output
-
-function Base.iterate(u::Flatten, i = u.o)
-    i isa AbstractObservable ? (i, i[]) : nothing
-end
-
-function inner_observable(o::AbstractObservable)
-    while (x = o[]) isa AbstractObservable
-        o = x
-    end
-    o
-end
-
-flatten(x) = x
-flatten(obs::AbstractObservable) = Flatten(obs)
