@@ -2,8 +2,7 @@ struct Nested{T}
     o::T
 end
 
-Base.iterate(u::Nested{<:AbstractObservable}, i = u.o) = i isa AbstractObservable ? (i, i[]) : nothing
-Base.iterate(u::Nested) = nothing
+Base.iterate(u::Nested, i = u.o) = i isa AbstractObservable ? (i, i[]) : nothing
 
 mutable struct Flatten <: AbstractObservable{Any}
     o::AbstractObservable
