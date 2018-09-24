@@ -187,3 +187,15 @@ end
     obs[] = Observable(Observable(13))
     @test o2[] == 13
 end
+
+
+@testset "naming" begin
+    obs = Observable(1)
+    @test name(obs, "nooo naaame") == "nooo naaame"
+    name!(obs, "hi")
+    @test name(obs) == "hi"
+    name!(obs, "no change")
+    @test name(obs) == "hi"
+    rename!(obs, "new name")
+    @test name(obs) == "new name"
+end

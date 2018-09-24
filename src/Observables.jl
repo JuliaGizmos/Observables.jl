@@ -1,6 +1,7 @@
 module Observables
 
 export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+export name, name!, rename!
 
 using Base: RefValue
 import Base.Iterators: filter
@@ -22,6 +23,41 @@ struct Observable{T} <: AbstractObservable{T}
     val::RefValue{T}
     listeners::Vector
 end
+
+const observable_names = Dict{UInt64, String}()
+
+
+"""
+    rename!(x::AbstractObservable, name)
+
+Renames an observable
+"""
+rename!(x::AbstractObservable, name) = observable_names[obsid(x)] = string(name)
+
+"""
+    name!(x::AbstractObservable, name)
+
+Optional naming infrastructure for observables.
+name!(observable, "the name") will associate `observable` with the `the name`,
+and can be retrieved via `name(observable)`. If an observable already has a name,
+nothing will be done! Call `rename!(x::AbstractObservable, name)`, if you want to
+change the name.
+"""
+function name!(x::AbstractObservable, name)
+    id = obsid(x)
+    if !haskey(observable_names, id)
+        observable_names[id] = string(name)
+    end
+end
+
+"""
+    name(x::Observable, default = "noname")
+if observable `x` is named, returns the name and otherwise returns `default`.
+"""
+function name(x::Observable, default = "noname")
+    get(observable_names, obsid(x), default)
+end
+
 Observable{T}(val) where T = Observable{T}(newid(), RefValue{T}(val), Any[])
 Observable(val::T) where T = Observable{T}(val)
 
