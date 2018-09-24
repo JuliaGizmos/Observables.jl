@@ -28,9 +28,9 @@ Observable(val::T) where {T} = Observable{T}(val)
 
 observe(x::Observable) = x
 
-let count=0
+let count = 0
     global newid
-    function newid(prefix="ob_")
+    function newid(prefix = "ob_")
         string(prefix, lpad(count += 1, 2, "0"))
     end
 end
@@ -53,8 +53,9 @@ end
     off(o::AbstractObservable, f)
 
 Removes `f` from listeners of `o`.
+If `raise` == true, throws an error when `f` can't be found.
 """
-function off(o::AbstractObservable, f)
+function off(o::AbstractObservable, f, raise = true)
     for i in 1:length(listeners(o))
         if f === listeners(o)[i]
             deleteat!(listeners(o), i)
@@ -64,7 +65,7 @@ function off(o::AbstractObservable, f)
             return
         end
     end
-    throw(KeyError(f))
+    raise && throw(KeyError(f))
 end
 
 """
