@@ -1,10 +1,9 @@
-__precompile__()
-
 module Observables
 
 export Observable, on, off, onany, connect!, obsid, async_latest, throttle
 
-import Base.Iterators.filter
+using Base: RefValue
+import Base.Iterators: filter
 
 const addhandler_callbacks = []
 const removehandler_callbacks = []
@@ -18,20 +17,20 @@ end
 """
 Like a `Ref` but updates can be watched by adding a handler using `on`.
 """
-mutable struct Observable{T} <: AbstractObservable{T}
-    id::String
-    val::T
+struct Observable{T} <: AbstractObservable{T}
+    id::UInt64
+    val::RefValue{T}
     listeners::Vector
 end
-Observable{T}(val) where {T} = Observable{T}(newid(), val, Any[])
-Observable(val::T) where {T} = Observable{T}(val)
+Observable{T}(val) where T = Observable{T}(newid(), RefValue{T}(val), Any[])
+Observable(val::T) where T = Observable{T}(val)
 
 observe(x::Observable) = x
 
-let count = 0
+let count = UInt64(0)
     global newid
-    function newid(prefix = "ob_")
-        string(prefix, lpad(count += 1, 2, "0"))
+    function newid()
+        count += 1
     end
 end
 
@@ -74,7 +73,7 @@ end
 Updates the value of an `Observable` to `val` and call its listeners.
 """
 function Base.setindex!(o::Observable, val; notify=x->true)
-    o.val = val
+    o.val[] = val
     for f in listeners(o)
         if notify(f)
             f(val)
@@ -93,7 +92,7 @@ setexcludinghandlers(o::AbstractObservable, val, pred=x->true) =
 
 Returns the current value of `o`.
 """
-Base.getindex(o::Observable) = o.val
+Base.getindex(o::Observable) = o.val[]
 
 Base.getindex(o::AbstractObservable) = getindex(observe(o))
 

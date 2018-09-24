@@ -7,7 +7,7 @@ Base.iterate(u::Nested, i = u.o) = i isa AbstractObservable ? (i, i[]) : nothing
 mutable struct Flatten <: AbstractObservable{Any}
     o::AbstractObservable
     list::Vector{Tuple{AbstractObservable, Function}}
-    inner_id::String
+    inner_id::UInt64
     output::Observable{Any}
     pair::ObservablePair
     function Flatten(o)
