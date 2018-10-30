@@ -35,6 +35,10 @@ let count=0
     end
 end
 
+function Base.show(io::IO, x::Observable{T}) where T
+    print(io, "Observable{T}($(x.val)) with $(length(x.listeners)) listeners")
+end
+
 """
     on(f, o::AbstractObservable)
 
