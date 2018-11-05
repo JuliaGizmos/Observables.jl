@@ -36,7 +36,7 @@ let count=0
 end
 
 function Base.show(io::IO, x::Observable{T}) where T
-    print(io, "Observable{$T}($(x.val)) with $(length(x.listeners)) listeners")
+    print(io, "Observable{$T}(...) with $(length(x.listeners)) listeners")
 end
 
 """
