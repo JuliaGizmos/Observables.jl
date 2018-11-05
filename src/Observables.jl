@@ -36,7 +36,8 @@ let count=0
 end
 
 function Base.show(io::IO, x::Observable{T}) where T
-    print(io, "Observable{$T}(...) with $(length(x.listeners)) listeners")
+    println(io, "Observable{$T} with $(length(x.listeners)) listeners. Value:")
+    show(io, x.val)
 end
 
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
