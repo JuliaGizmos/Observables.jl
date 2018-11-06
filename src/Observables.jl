@@ -35,6 +35,13 @@ let count=0
     end
 end
 
+function Base.show(io::IO, x::Observable{T}) where T
+    println(io, "Observable{$T} with $(length(x.listeners)) listeners. Value:")
+    show(io, x.val)
+end
+
+Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
+
 """
     on(f, o::AbstractObservable)
 
