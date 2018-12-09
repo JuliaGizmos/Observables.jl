@@ -162,11 +162,11 @@ connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o2, o1
 """
     map(f, o::Observable, args...)
 
-Creates a new oservable ref which contains the result of `f` applied to
-values extracted from args. The second argument `o` must be an oservable ref for
-dispatch reasons. `args` may contain any number of `Observable` ojects.
+Creates a new observable ref which contains the result of `f` applied to
+values extracted from args. The second argument `o` must be an observable ref for
+dispatch reasons. `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
-All other ojects in `args` are passed as-is.
+All other objects in `args` are passed as-is.
 """
 function Base.map(f, o::AbstractObservable, os...; init=f(o[], map(_val, os)...))
     map!(f, Observable{Any}(init), o, os...)
