@@ -138,7 +138,7 @@ function onany(f, os...)
 end
 
 """
-    map!(f, o::Observable, args...)
+    map!(f, o::AbstractObservable, args...)
 
 Updates `o` with the result of calling `f` with values extracted from args.
 `args` may contain any number of `Observable` ojects.
@@ -153,14 +153,14 @@ function Base.map!(f, o::AbstractObservable, os...)
 end
 
 """
-    connect!(o1::Observable, o2::Observable)
+    connect!(o1::AbstractObservable, o2::AbstractObservable)
 
 Forward all updates to `o1` to `o2`
 """
 connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o2, o1)
 
 """
-    map(f, o::Observable, args...)
+    map(f, o::AbstractObservable, args...)
 
 Creates a new oservable ref which contains the result of `f` applied to
 values extracted from args. The second argument `o` must be an oservable ref for
