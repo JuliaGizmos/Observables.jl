@@ -28,7 +28,7 @@ computed when `@map` is called and  every time the `AbstractObservables` are upd
 
 ## Examples
 
-```jldoctest mapmacro
+```
 julia> a = Observable(2);
 
 julia> b = Observable(3);
@@ -62,7 +62,7 @@ computed every time the `AbstractObservables` are updated and `d` will be set to
 
 ## Examples
 
-```jldoctest mapmacro
+```
 julia> a = Observable(2);
 
 julia> b = Observable(3);
@@ -98,7 +98,7 @@ computed every time the `AbstractObservables` are updated.
 
 ## Examples
 
-```jldoctest onmacro
+```
 julia> a = Observable(2);
 
 julia> b = Observable(3);
