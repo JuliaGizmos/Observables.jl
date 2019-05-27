@@ -175,7 +175,7 @@ end
 Base.eltype(::AbstractObservable{T}) where {T} = T
 
 """
-`async_latest(o::AbstractObservable, n=1)`
+    async_latest(o::AbstractObservable, n=1)
 
 Returns an `Observable` which drops all but
 the last `n` updates to `o` if processing the updates
