@@ -125,9 +125,9 @@ listeners(o::AbstractObservable) = listeners(observe(o))
     onany(f, args...)
 
 Calls `f` on updates to any oservable refs in `args`.
-`args` may contain any number of `Observable` ojects.
+`args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
-All other ojects in `args` are passed as-is.
+All other objects in `args` are passed as-is.
 """
 function onany(f, os...)
     oservs = filter(x->isa(x, AbstractObservable), os)
@@ -138,12 +138,12 @@ function onany(f, os...)
 end
 
 """
-    map!(f, o::Observable, args...)
+    map!(f, o::AbstractObservable, args...)
 
 Updates `o` with the result of calling `f` with values extracted from args.
-`args` may contain any number of `Observable` ojects.
+`args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
-All other ojects in `args` are passed as-is.
+All other objects in `args` are passed as-is.
 """
 function Base.map!(f, o::AbstractObservable, os...)
     onany(os...) do val...
@@ -153,14 +153,14 @@ function Base.map!(f, o::AbstractObservable, os...)
 end
 
 """
-    connect!(o1::Observable, o2::Observable)
+    connect!(o1::AbstractObservable, o2::AbstractObservable)
 
 Forward all updates to `o1` to `o2`
 """
 connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o2, o1)
 
 """
-    map(f, o::Observable, args...)
+    map(f, o::AbstractObservable, args...)
 
 Creates a new observable ref which contains the result of `f` applied to
 values extracted from args. The second argument `o` must be an observable ref for
