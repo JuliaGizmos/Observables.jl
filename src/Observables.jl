@@ -155,7 +155,7 @@ end
 """
     connect!(o1::AbstractObservable, o2::AbstractObservable)
 
-Forward all updates to `o1` to `o2`
+Forwards all updates from `o2` to `o1`
 """
 connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o2, o1)
 
