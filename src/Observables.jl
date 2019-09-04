@@ -77,27 +77,29 @@ end
 
 Updates the value of an `Observable` to `val` and call its listeners.
 """
-function Base.setindex!(o::Observable, val_async; notify=x->true)
-    @async begin
-        val = fetch(val_async)
-        o.val = val
-        for f in listeners(o)
-            if notify(f)
-                try
-                    Base.invokelatest(f, val)
-                catch e
-                    # As weird as it is, Julia does seem to have problems with errors
-                    # encountered in f(val) - it might stack overflow or just silently freeze
-                    # the try catch and manual error display seems to solve this
-                    Base.showerror(stderr, e)
-                    Base.show_backtrace(stderr, catch_backtrace())
-                    rethrow(e)
-                end
+function Base.setindex!(o::Observable, val; notify=x->true)
+    o.val = val
+    for f in listeners(o)
+        if notify(f)
+            try
+                Base.invokelatest(f, val)
+            catch e
+                # As weird as it is, Julia does seem to have problems with errors
+                # encountered in f(val) - it might stack overflow or just silently freeze
+                # the try catch and manual error display seems to solve this
+                Base.showerror(stderr, e)
+                Base.show_backtrace(stderr, catch_backtrace())
+                rethrow(e)
             end
         end
     end
 end
-
+function Base.setindex!(o::Observable, val_async::Task; notify=x->true)
+    @async begin
+        val = fetch(val_async)
+        o[] = val
+    end
+end
 function Base.setindex!(o::Observable, channel::Channel; notify=x->true)
     @async begin
         for val in channel
@@ -137,7 +139,7 @@ struct OnUpdate{F, Args}
     f::F
     args::Args
 end
-(ou::OnUpdate)() = ou.f(map(_val, ou.args)...)
+(ou::OnUpdate)(_) = ou.f(map(_val, ou.args)...)
 
 """
     onany(f, args...)
