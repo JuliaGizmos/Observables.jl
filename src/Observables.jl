@@ -77,20 +77,32 @@ end
 
 Updates the value of an `Observable` to `val` and call its listeners.
 """
-function Base.setindex!(o::Observable, val; notify=x->true)
-    o.val = val
-    for f in listeners(o)
-        if notify(f)
-            try
-                f(val)
-            catch e
-                # As weird as it is, Julia does seem to have problems with errors
-                # encountered in f(val) - it might stack overflow or just silently freeze
-                # the try catch and manual error display seems to solve this
-                Base.showerror(stderr, e)
-                Base.show_backtrace(stderr, catch_backtrace())
-                rethrow(e)
+function Base.setindex!(o::Observable, val_async; notify=x->true)
+    @async begin
+        val = fetch(val_async)
+        o.val = val
+        for f in listeners(o)
+            if notify(f)
+                try
+                    Base.invokelatest(f, val)
+                catch e
+                    # As weird as it is, Julia does seem to have problems with errors
+                    # encountered in f(val) - it might stack overflow or just silently freeze
+                    # the try catch and manual error display seems to solve this
+                    Base.showerror(stderr, e)
+                    Base.show_backtrace(stderr, catch_backtrace())
+                    rethrow(e)
+                end
             end
+        end
+    end
+end
+
+function Base.setindex!(o::Observable, channel::Channel; notify=x->true)
+    @async begin
+        for val in channel
+            o[] = val
+            yield()
         end
     end
 end
@@ -121,6 +133,12 @@ obsid(o::AbstractObservable) = obsid(observe(o))
 listeners(o::Observable) = o.listeners
 listeners(o::AbstractObservable) = listeners(observe(o))
 
+struct OnUpdate{F, Args}
+    f::F
+    args::Args
+end
+(ou::OnUpdate)() = ou.f(map(_val, ou.args)...)
+
 """
     onany(f, args...)
 
@@ -129,11 +147,10 @@ Calls `f` on updates to any oservable refs in `args`.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
-function onany(f, os...)
-    oservs = filter(x->isa(x, AbstractObservable), os)
-    g(_) = f(map(_val, os)...)
-    for o in oservs
-        on(g, o)
+function onany(f, args...)
+    g = OnUpdate(f, args)
+    for o in args
+        (o isa AbstractObservable) && on(g, o)
     end
 end
 
