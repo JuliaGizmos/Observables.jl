@@ -94,12 +94,14 @@ function Base.setindex!(o::Observable, val; notify=x->true)
         end
     end
 end
+
 function Base.setindex!(o::Observable, val_async::Task; notify=x->true)
     @async begin
         val = fetch(val_async)
         o[] = val
     end
 end
+
 function Base.setindex!(o::Observable, channel::Channel; notify=x->true)
     @async begin
         for val in channel
@@ -139,7 +141,7 @@ struct OnUpdate{F, Args}
     f::F
     args::Args
 end
-(ou::OnUpdate)(_) = ou.f(map(_val, ou.args)...)
+(ou::OnUpdate)(_) = Base.invokelatest(ou.f, map(_val, ou.args)...)
 
 """
     onany(f, args...)
@@ -166,7 +168,7 @@ All other objects in `args` are passed as-is.
 """
 function Base.map!(f, o::AbstractObservable, os...)
     onany(os...) do val...
-        o[] = f(val...)
+        o[] = Base.invokelatest(f, val...)
     end
     o
 end
