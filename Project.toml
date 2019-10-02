@@ -1,0 +1,12 @@
+name = "Observables"
+uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
+version = "0.2.3"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
