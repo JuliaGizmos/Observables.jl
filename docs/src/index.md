@@ -33,17 +33,16 @@ Another difference is Observables are synchronous, Signals are asynchronous. Obs
 
 ## API
 
-```@docs
-Observable{T}
-on(f, o::Observable)
-off(o::Observable, f)
-Base.setindex!(o::Observable, val)
-Base.getindex(o::Observable)
-onany(f, os...)
-Observables.@on
-Base.map!(f, o::Observable, os...)
-Observables.@map!
-connect!(o1::Observable, o2::Observable)
-Base.map(f, o::Observable, os...; init)
-Observables.@map
+### Public
+
+```@autodocs
+Modules = [Observables]
+Private = false
+```
+
+### Internal
+
+```@autodocs
+Modules = [Observables]
+Public = false
 ```
