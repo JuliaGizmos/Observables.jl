@@ -1,0 +1,6 @@
+name = "Observables"
+uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
+version = "0.2.3"
+
+[compat]
+julia = "0.7, 1"
