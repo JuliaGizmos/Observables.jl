@@ -21,6 +21,7 @@ mutable struct Observable{T} <: AbstractObservable{T}
     val::T
     listeners::Vector
 end
+
 Observable{T}(val) where {T} = Observable{T}(newid(), val, Any[])
 Observable(val::T) where {T} = Observable{T}(val)
 
@@ -81,16 +82,7 @@ function Base.setindex!(o::Observable, val; notify=x->true)
     o.val = val
     for f in listeners(o)
         if notify(f)
-            try
-                Base.invokelatest(f, val)
-            catch e
-                # As weird as it is, Julia does seem to have problems with errors
-                # encountered in f(val) - it might stack overflow or just silently freeze
-                # the try catch and manual error display seems to solve this
-                Base.showerror(stderr, e)
-                Base.show_backtrace(stderr, catch_backtrace())
-                rethrow(e)
-            end
+            Base.invokelatest(f, val)
         end
     end
 end
