@@ -188,7 +188,7 @@ end
 """
     connect!(o1::AbstractObservable, o2::AbstractObservable)
 
-Forward all updates to `o1` to `o2`
+Forwards all updates from `o2` to `o1`
 """
 connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o2, o1)
 
@@ -209,7 +209,7 @@ end
 Base.eltype(::AbstractObservable{T}) where {T} = T
 
 """
-`async_latest(observable::AbstractObservable, n=1)`
+    async_latest(observable::AbstractObservable, n=1)
 
 Returns an `Observable` which drops all but
 the last `n` updates to `observable` if processing the updates
