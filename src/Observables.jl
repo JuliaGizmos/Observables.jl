@@ -7,7 +7,10 @@ import Base.Iterators.filter
 const addhandler_callbacks = []
 const removehandler_callbacks = []
 
-abstract type AbstractObservable{T}; end
+abstract type AbstractObservable{T} end
+
+# Internal function that doesn't need invokelatest!
+abstract type InternalFunction <: Function end
 
 function observe(::S) where {S<:AbstractObservable}
     error("observe not defined for AbstractObservable $S")
@@ -17,22 +20,26 @@ end
 Like a `Ref` but updates can be watched by adding a handler using `on`.
 """
 mutable struct Observable{T} <: AbstractObservable{T}
-    id::String
     val::T
-    listeners::Vector
+    listeners::Vector{Any}
 end
 
-Observable{T}(val) where {T} = Observable{T}(newid(), val, Any[])
+function Base.getproperty(obs::Observable, field::Symbol)
+    if field === :val
+        return getfield(obs, field)
+    elseif field === :listeners
+        return getfield(obs, field)
+    elseif field === :id
+        return obsid(obs)
+    else
+        error("Field $(field) not found")
+    end
+end
+
+Observable{T}(val) where {T} = Observable{T}(val, Any[])
 Observable(val::T) where {T} = Observable{T}(val)
 
 observe(x::Observable) = x
-
-let count=0
-    global newid
-    function newid(prefix="ob_")
-        string(prefix, lpad(count += 1, 2, "0"))
-    end
-end
 
 function Base.show(io::IO, x::Observable{T}) where T
     println(io, "Observable{$T} with $(length(x.listeners)) listeners. Value:")
@@ -42,30 +49,31 @@ end
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
 
 """
-    on(f, o::AbstractObservable)
+    on(f, observable::AbstractObservable)
 
-Adds function `f` as listener to `o`. Whenever `o`'s value
-is set via `o[] = val` `f` is called with `val`.
+Adds function `f` as listener to `observable`. Whenever `observable`'s value
+is set via `observable[] = val` `f` is called with `val`.
 """
-function on(f, o::AbstractObservable)
-    push!(listeners(o), f)
+function on(f, observable::AbstractObservable)
+    push!(listeners(observable), f)
     for g in addhandler_callbacks
-        g(f, o)
+        g(f, observable)
     end
-    f
+    return f
 end
 
 """
-    off(o::AbstractObservable, f)
+    off(observable::AbstractObservable, f)
 
-Removes `f` from listeners of `o`.
+Removes `f` from listeners of `observable`.
 """
-function off(o::AbstractObservable, f)
-    for i in 1:length(listeners(o))
-        if f === listeners(o)[i]
-            deleteat!(listeners(o), i)
+function off(observable::AbstractObservable, f)
+    callbacks = listeners(observable)
+    for (i, f2) in enumerate(callbacks)
+        if f === f2
+            deleteat!(callbacks, i)
             for g in removehandler_callbacks
-                g(o, f)
+                g(observable, f)
             end
             return
         end
@@ -74,66 +82,71 @@ function off(o::AbstractObservable, f)
 end
 
 """
-    o[] = val
+    observable[] = val
 
 Updates the value of an `Observable` to `val` and call its listeners.
 """
-function Base.setindex!(o::Observable, val; notify=x->true)
-    o.val = val
-    for f in listeners(o)
-        if notify(f)
+function Base.setindex!(observable::Observable, val; notify=(x)->true)
+    observable.val = val
+    for f in listeners(observable)
+        if f isa InternalFunction
+            f(val)
+        else
             Base.invokelatest(f, val)
         end
     end
 end
 
-function Base.setindex!(o::Observable, val_async::Task; notify=x->true)
+function Base.setindex!(observable::Observable, val_async::Task; notify=x->true)
     @async begin
         val = fetch(val_async)
-        o[] = val
+        observable[] = val
     end
 end
 
-function Base.setindex!(o::Observable, channel::Channel; notify=x->true)
+function Base.setindex!(observable::Observable, channel::Channel; notify=x->true)
     @async begin
         for val in channel
-            o[] = val
+            observable[] = val
             yield()
         end
     end
 end
 
-Base.setindex!(o::AbstractObservable, val; notify=x->true) =
-    Base.setindex!(observe(o), val; notify=notify)
+function Base.setindex!(observable::AbstractObservable, val; notify=x->true)
+    Base.setindex!(observe(observable), val; notify=notify)
+end
 
-setexcludinghandlers(o::AbstractObservable, val, pred=x->true) =
-    setindex!(o, val; notify=pred)
+function setexcludinghandlers(observable::AbstractObservable, val, pred=x->true)
+    setindex!(observable, val; notify=pred)
+end
 
 """
-    o[]
+    observable[]
 
-Returns the current value of `o`.
+Returns the current value of `observable`.
 """
-Base.getindex(o::Observable) = o.val
+Base.getindex(observable::Observable) = observable.val
 
-Base.getindex(o::AbstractObservable) = getindex(observe(o))
+Base.getindex(observable::AbstractObservable) = getindex(observe(observable))
 
 ### Utilities
 
-_val(o::AbstractObservable) = o[]
+_val(observable::AbstractObservable) = observable[]
 _val(x) = x
 
-obsid(o::Observable) = o.id
-obsid(o::AbstractObservable) = obsid(observe(o))
+obsid(observable::Observable) = string(objectid(observable))
+obsid(observable::AbstractObservable) = obsid(observe(observable))
 
-listeners(o::Observable) = o.listeners
-listeners(o::AbstractObservable) = listeners(observe(o))
+listeners(observable::Observable) = observable.listeners
+listeners(observable::AbstractObservable) = listeners(observe(observable))
 
-struct OnUpdate{F, Args}
+struct OnUpdate{F, Args} <: InternalFunction
     f::F
     args::Args
 end
-(ou::OnUpdate)(_) = Base.invokelatest(ou.f, map(_val, ou.args)...)
+
+(ou::OnUpdate)(_) = ou.f(map(_val, ou.args)...)
 
 """
     onany(f, args...)
@@ -144,25 +157,32 @@ Calls `f` on updates to any oservable refs in `args`.
 All other objects in `args` are passed as-is.
 """
 function onany(f, args...)
-    g = OnUpdate(f, args)
-    for o in args
-        (o isa AbstractObservable) && on(g, o)
+    callback = OnUpdate(f, args)
+    for observable in args
+        (observable isa AbstractObservable) && on(callback, observable)
     end
 end
 
-"""
-    map!(f, o::AbstractObservable, args...)
+struct MapUpdater{F, T} <: InternalFunction
+    f::F
+    observable::Observable{T}
+end
 
-Updates `o` with the result of calling `f` with values extracted from args.
+function (mu::MapUpdater)(args...)
+    mu.observable[] = mu.f(args...)
+end
+
+"""
+    map!(f, observable::AbstractObservable, args...)
+
+Updates `observable` with the result of calling `f` with values extracted from args.
 `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
-function Base.map!(f, o::AbstractObservable, os...)
-    onany(os...) do val...
-        o[] = Base.invokelatest(f, val...)
-    end
-    o
+function Base.map!(f, observable::AbstractObservable, os...)
+    onany(MapUpdater(f, observable), os...)
+    return observable
 end
 
 """
@@ -173,25 +193,26 @@ Forward all updates to `o1` to `o2`
 connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o2, o1)
 
 """
-    map(f, o::AbstractObservable, args...)
+    map(f, observable::AbstractObservable, args...)
 
 Creates a new observable ref which contains the result of `f` applied to
-values extracted from args. The second argument `o` must be an observable ref for
+values extracted from args. The second argument `observable` must be an observable ref for
 dispatch reasons. `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
-function Base.map(f, o::AbstractObservable, os...; init=f(o[], map(_val, os)...))
-    map!(f, Observable{Any}(init), o, os...)
+function Base.map(f, observable::AbstractObservable, os...;
+                  init=f(observable[], map(_val, os)...))
+    map!(f, Observable{Any}(init), observable, os...)
 end
 
 Base.eltype(::AbstractObservable{T}) where {T} = T
 
 """
-`async_latest(o::AbstractObservable, n=1)`
+`async_latest(observable::AbstractObservable, n=1)`
 
 Returns an `Observable` which drops all but
-the last `n` updates to `o` if processing the updates
+the last `n` updates to `observable` if processing the updates
 takes longer than the interval between updates.
 
 This is useful if you want to pass the updates from,
@@ -201,16 +222,16 @@ skipping the intermediate ones.
 
 # Example:
 ```
-o = Observable(0)
+observable = Observable(0)
 function compute_something(x)
     for i=1:10^8 rand() end # simulate something expensive
     println("updated with \$x")
 end
-o_latest = async_latest(o, 1)
+o_latest = async_latest(observable, 1)
 on(compute_something, o_latest) # compute something on the latest update
 
 for i=1:5
-    o[] = i
+    observable[] = i
 end
 ```
 """
