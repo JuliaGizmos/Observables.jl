@@ -120,10 +120,12 @@ Updates the value of an `Observable` to `val` and call its listeners.
 function Base.setindex!(observable::Observable, val; notify=(x)->true)
     observable.val = val
     for f in listeners(observable)
-        if f isa InternalFunction
-            f(val)
-        else
-            Base.invokelatest(f, val)
+        if notify(f)
+            if f isa InternalFunction
+                f(val)
+            else
+                Base.invokelatest(f, val)
+            end
         end
     end
 end
@@ -131,14 +133,14 @@ end
 function Base.setindex!(observable::Observable, val_async::Task; notify=x->true)
     @async begin
         val = fetch(val_async)
-        observable[] = val
+        setindex!(observable, val, notify=notify)
     end
 end
 
 function Base.setindex!(observable::Observable, channel::Channel; notify=x->true)
     @async begin
         for val in channel
-            observable[] = val
+            setindex!(observable, val, notify=notify)
             yield()
         end
     end
