@@ -21,14 +21,14 @@ function map_helper(expr)
 end
 
 """
-`@map(expr)`
+    @map(expr)
 
 Wrap `AbstractObservables` in `&` to compute expression `expr` using their value. The expression will be
 computed when `@map` is called and  every time the `AbstractObservables` are updated.
 
 ## Examples
 
-```jldoctest mapmacro
+```
 julia> a = Observable(2);
 
 julia> b = Observable(3);
@@ -55,14 +55,14 @@ function map!_helper(d, expr)
 end
 
 """
-`@map!(d, expr)`
+    @map!(d, expr)
 
 Wrap `AbstractObservables` in `&` to compute expression `expr` using their value: the expression will be
 computed every time the `AbstractObservables` are updated and `d` will be set to match that value.
 
 ## Examples
 
-```jldoctest mapmacro
+```
 julia> a = Observable(2);
 
 julia> b = Observable(3);
@@ -91,14 +91,14 @@ function on_helper(expr)
 end
 
 """
-`@on(expr)`
+    @on(expr)
 
 Wrap `AbstractObservables` in `&` to execute expression `expr` using their value. The expression will be
 computed every time the `AbstractObservables` are updated.
 
 ## Examples
 
-```jldoctest onmacro
+```
 julia> a = Observable(2);
 
 julia> b = Observable(3);
