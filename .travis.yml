@@ -4,8 +4,12 @@ os:
   - linux
   - osx
 julia:
-  - 0.7
   - 1.0
+  - 1.3
+  - nightly
+matrix:
+  allow_failures:
+    - julia: nightly
 notifications:
   email: false
 # uncomment the following lines to override the default test script
@@ -13,9 +17,5 @@ notifications:
 #  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 #  - julia -e 'Pkg.clone(pwd()); Pkg.build("Observables"); Pkg.test("Observables"; coverage=true)'
 after_success:
-  # push coverage results to Coveralls
-  - julia -e 'cd(Pkg.dir("Observables")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
-  # push coverage results to Codecov
-  - julia -e 'cd(Pkg.dir("Observables")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
-  - julia -e 'ps=Pkg.PackageSpec(name="Documenter", version="0.19"); Pkg.add(ps); Pkg.pin(ps)'
-  - julia -e 'cd(Pkg.dir("Observables")); include(joinpath("docs", "make.jl"))'
+  - julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
+  - julia -e 'using Pkg; Pkg.add("Documenter"); using Observables; include(joinpath(dirname(pathof(Observables)), "..", "docs", "make.jl"))'
