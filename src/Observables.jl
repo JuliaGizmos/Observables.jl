@@ -20,9 +20,35 @@ end
 Like a `Ref` but updates can be watched by adding a handler using `on`.
 """
 mutable struct Observable{T} <: AbstractObservable{T}
-    val::T
     listeners::Vector{Any}
+    val::T
+    Observable{T}() where {T} = new{T}([])
+    Observable{T}(val) where {T} = new{T}([], val)
 end
+
+function Base.copy(observable::Observable{T}) where T
+    result = Observable(observable[])
+    on(observable) do value
+        result[] = value
+    end
+    return result
+end
+
+Observable(val::T) where {T} = Observable{T}(val)
+observe(x::Observable) = x
+
+Base.convert(::Type{Observable}, x::AbstractObservable) = x
+Base.convert(::Type{Observable{T}}, x::AbstractObservable{T}) where {T} = x
+
+function Base.convert(::Type{Observable{T}}, x::AbstractObservable) where {T}
+    result = Observable{T}(convert(T, x[]))
+    on(x) do value
+        result[] = convert(T, value)
+    end
+    return result
+end
+
+Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
 
 function Base.getproperty(obs::Observable, field::Symbol)
     if field === :val
@@ -36,10 +62,15 @@ function Base.getproperty(obs::Observable, field::Symbol)
     end
 end
 
-Observable{T}(val) where {T} = Observable{T}(val, Any[])
-Observable(val::T) where {T} = Observable{T}(val)
+"""
+    notify!(observable::AbstractObservable)
 
-observe(x::Observable) = x
+Pushes an updates to all listeners of `observable`
+"""
+function notify!(observable::AbstractObservable)
+    observable[] = observable[]
+    return
+end
 
 function Base.show(io::IO, x::Observable{T}) where T
     println(io, "Observable{$T} with $(length(x.listeners)) listeners. Value:")
@@ -132,9 +163,19 @@ Base.getindex(observable::AbstractObservable) = getindex(observe(observable))
 
 ### Utilities
 
-_val(observable::AbstractObservable) = observable[]
-_val(x) = x
+"""
+    to_value(x::Union{Any, AbstractObservable})
+Extracts the value of an observable, and returns the object if it's not an observable!
+"""
+to_value(observable::AbstractObservable) = observable[]
+to_value(x) = x
 
+
+"""
+    obsid(observable::Observable)
+
+Gets a unique id for an observable!
+"""
 obsid(observable::Observable) = string(objectid(observable))
 obsid(observable::AbstractObservable) = obsid(observe(observable))
 
@@ -146,7 +187,7 @@ struct OnUpdate{F, Args} <: InternalFunction
     args::Args
 end
 
-(ou::OnUpdate)(_) = ou.f(map(_val, ou.args)...)
+(ou::OnUpdate)(_) = ou.f(map(to_value, ou.args)...)
 
 """
     onany(f, args...)
@@ -202,7 +243,7 @@ dispatch reasons. `args` may contain any number of `Observable` objects.
 All other objects in `args` are passed as-is.
 """
 function Base.map(f, observable::AbstractObservable, os...;
-                  init=f(observable[], map(_val, os)...))
+                  init=f(observable[], map(to_value, os)...))
     map!(f, Observable{Any}(init), observable, os...)
 end
 
@@ -275,7 +316,6 @@ function async_latest(input::AbstractObservable{T}, n=1) where T
 end
 
 # TODO: overload broadcast on v0.6
-
 include("observablepair.jl")
 include("flatten.jl")
 include("time.jl")
