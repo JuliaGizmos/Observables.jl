@@ -223,7 +223,7 @@ end
     while !isdefined(y, :val)
         sleep(0.001)
     end
-    @test isapprox(time() - wait_time, 0.5, atol=0.01)
+    @test isapprox(time() - wait_time, 0.5, atol=0.1)
     @test y[] == 2
 
     x = Observable(1)
