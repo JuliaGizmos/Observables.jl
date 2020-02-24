@@ -9,10 +9,4 @@ makedocs(
     pages = Any["Home" => "index.md"],
 )
 
-deploydocs(
-    julia = "nightly",
-    repo = "github.com/JuliaGizmos/Observables.jl.git",
-    target = "build",
-    deps = nothing,
-    make = nothing,
-)
+deploydocs(repo = "github.com/JuliaGizmos/Observables.jl.git")

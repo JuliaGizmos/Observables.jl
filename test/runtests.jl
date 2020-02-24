@@ -161,7 +161,17 @@ end
 
 @testset "pair" begin
     v = Observables.ObservablePair(Observable(1.0), f = exp, g = log)
+    @test length(v) == 2
+    @test firstindex(v) == 1
+    @test lastindex(v) == 2
+    firstobs, lastobs = v
+    @test firstobs[] == 1.0
+    @test lastobs[] ≈ ℯ
     @test v.second[] ≈ ℯ
+    @test first(v)[] ≈ 1.0
+    @test last(v)[] ≈ ℯ
+    @test v[2][] ≈ ℯ
+
     v.first[] = 0
     @test v.second[] ≈ 1
     v.second[] = 2
@@ -186,4 +196,65 @@ end
 
     obs[] = Observable(Observable(13))
     @test o2[] == 13
+end
+
+@testset "async" begin
+    y = Observable(@async begin
+        sleep(0.5)
+        return 1 + 1
+    end)
+    @test !isdefined(y, :val)
+    wait_time = time()
+    while !isdefined(y, :val)
+        sleep(0.001)
+    end
+    @test isapprox(time() - wait_time, 0.5, atol=0.1)
+    @test y[] == 2
+
+    x = Observable(1)
+    y = map(x) do val
+        @async begin
+            sleep(0.5)
+            return val + 1
+        end
+    end
+    @test !isdefined(y, :val)
+    wait_time = time()
+    while !isdefined(y, :val)
+        sleep(0.001)
+    end
+    @test isapprox(time() - wait_time, 0.5, atol=0.1)
+    @test y[] == 2
+
+    x = Observable(1)
+    y = map(x) do val
+        Channel() do channel
+            for i in 1:10
+                put!(channel, i + val)
+            end
+        end
+    end
+    @test !isdefined(y, :val)
+    vals = Int[]
+    on(y) do val
+        push!(vals, val)
+    end
+    while length(vals) != 10
+        sleep(0.001)
+    end
+    @test vals == 2:11
+    y = Observable(Channel() do channel
+        for i in 1:10
+            put!(channel, i + 1)
+        end
+    end)
+    @test !isdefined(y, :val)
+    vals = Int[]
+    on(y) do val
+        push!(vals, val)
+    end
+    while length(vals) != 10
+        sleep(0.001)
+    end
+    @test vals == 2:11
 end
