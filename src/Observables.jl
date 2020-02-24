@@ -35,6 +35,7 @@ function Base.copy(observable::Observable{T}) where T
 end
 
 Observable(val::T) where {T} = Observable{T}(val)
+
 observe(x::Observable) = x
 
 Base.convert(::Type{Observable}, x::AbstractObservable) = x
@@ -74,7 +75,11 @@ end
 
 function Base.show(io::IO, x::Observable{T}) where T
     println(io, "Observable{$T} with $(length(x.listeners)) listeners. Value:")
-    show(io, x.val)
+    if isdefined(x, :val)
+        show(io, x.val)
+    else
+        println(io, "not assigned yet!")
+    end
 end
 
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
@@ -130,18 +135,39 @@ function Base.setindex!(observable::Observable, val; notify=(x)->true)
     end
 end
 
+####################################################
+# tasks & channel api
+
+Observable(val::Channel{T}) where {T} = Observable{T}(val)
+Observable(val::Task) = Observable{Any}(val)
+function Observable{T}(val::Union{Task, Channel}) where {T}
+    observable = Observable{T}()
+    observable[] = val
+    return observable
+end
+
 function Base.setindex!(observable::Observable, val_async::Task; notify=x->true)
-    @async begin
-        val = fetch(val_async)
-        setindex!(observable, val, notify=notify)
+    return @async begin
+        try
+            val = fetch(val_async)
+            setindex!(observable, val, notify=notify)
+        catch e
+            Base.showerror(stderr, e)
+            Base.show_backtrace(stderr, catch_backtrace())
+        end
     end
 end
 
 function Base.setindex!(observable::Observable, channel::Channel; notify=x->true)
-    @async begin
-        for val in channel
-            setindex!(observable, val, notify=notify)
-            yield()
+    return @async begin
+        try
+            for val in channel
+                setindex!(observable, val, notify=notify)
+                yield()
+            end
+        catch e
+            Base.showerror(stderr, e)
+            Base.show_backtrace(stderr, catch_backtrace())
         end
     end
 end
