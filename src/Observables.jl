@@ -27,7 +27,7 @@ mutable struct Observable{T} <: AbstractObservable{T}
 end
 
 function Base.copy(observable::Observable{T}) where T
-    result = Observable(observable[])
+    result = Observable{T}(observable[])
     on(observable) do value
         result[] = value
     end
