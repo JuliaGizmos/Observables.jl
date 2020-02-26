@@ -258,3 +258,10 @@ end
     end
     @test vals == 2:11
 end
+
+@testset "copy" begin
+    obs = Observable{Any}(:hey)
+    obs_copy = copy(obs)
+    obs[] = 1
+    @test obs_copy[] == 1
+end
