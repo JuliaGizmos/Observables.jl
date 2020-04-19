@@ -1,6 +1,6 @@
 module Observables
 
-export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+export Observable, Obs, on, off, onany, connect!, obsid, async_latest, throttle
 
 import Base.Iterators.filter
 
@@ -17,7 +17,7 @@ function observe(::S) where {S<:AbstractObservable}
 end
 
 """
-Like a `Ref` but updates can be watched by adding a handler using `on`.
+Like a `Ref` but updates can be watched by adding a handler using [`on`](@ref).
 """
 mutable struct Observable{T} <: AbstractObservable{T}
     listeners::Vector{Any}
@@ -25,6 +25,11 @@ mutable struct Observable{T} <: AbstractObservable{T}
     Observable{T}() where {T} = new{T}([])
     Observable{T}(val) where {T} = new{T}([], val)
 end
+
+"""
+Alias of `Observable`.  Lika a `Ref`, but updates can be watched by adding a handler using [`on`](@ref).
+"""
+const Obs = Observable
 
 function Base.copy(observable::Observable{T}) where T
     result = Observable{T}(observable[])
