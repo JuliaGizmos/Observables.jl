@@ -1,6 +1,7 @@
 module Observables
 
 export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+export async_latest
 
 import Base.Iterators.filter
 
