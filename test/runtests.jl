@@ -44,6 +44,30 @@ end
     @test r2[] == 4
 end
 
+@testset "weak connections" begin
+    a = Observable(1)
+
+    function barrier()
+        b = Ref(1)
+        sdf = on(a) do a
+            b[] += 1
+        end
+
+        a[] = 2
+        @test b[] == 2
+
+        nothing
+    end
+
+    GC.enable(false)
+    barrier()
+    @test length(Observables.listeners(a)) == 1
+
+    GC.enable(true)
+    GC.gc()
+    @test isempty(Observables.listeners(a))
+end
+
 @testset "macros" begin
     a = Observable(2)
     b = Observable(3)
