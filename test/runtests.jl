@@ -47,25 +47,46 @@ end
 @testset "weak connections" begin
     a = Observable(1)
 
-    function barrier()
-        b = Ref(1)
+    memory_cleared = Ref(false)
+
+    # this struct is just supposed to show how a value in memory can be released
+    mutable struct ToFinalize
+        val
+
+        function ToFinalize(val)
+            tf = new(val)
+            finalizer(tf) do tf
+                memory_cleared[] = true
+            end
+        end
+    end
+
+    function create_a_dangling_listener()
+        t = ToFinalize(1)
+
         sdf = on(a) do a
-            b[] += 1
+            t.val += 1
         end
 
         a[] = 2
-        @test b[] == 2
+        @test t.val == 2
 
+        # sdf falls out of scope here and should deregister the closure
+        # when it gets garbage collected, which should in turn free t
         nothing
     end
 
     GC.enable(false)
-    barrier()
+    create_a_dangling_listener()
     @test length(Observables.listeners(a)) == 1
+    @test memory_cleared[] == false
 
     GC.enable(true)
     GC.gc()
+    # somehow this needs a double sweep, maybe first sdf, then ToFinalize?
+    GC.gc()
     @test isempty(Observables.listeners(a))
+    @test memory_cleared[] == true
 end
 
 @testset "macros" begin
