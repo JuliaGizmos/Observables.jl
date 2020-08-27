@@ -85,24 +85,42 @@ end
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
 
 
-mutable struct SelfDeregisteringFunction <: Function
+"""
+    mutable struct ObserverFunction <: Function
+
+Fields:
+
     f::Function
-    observables::Set{<:AbstractObservable} # use a Set so there are no worries about double entries
+    observable::AbstractObservable
+    weak::Bool
 
-    function SelfDeregisteringFunction(f, observables::Set)
-        sdf = new(f, observables)
+`ObserverFunction` is intended as the return value for `on` because
+we can remove the created closure from `obsfunc.observable`'s listener vectors when
+ObserverFunction goes out of scope - as long as the `weak` flag is set.
+If the `weak` flag is not set, nothing happens
+when the ObserverFunction goes out of scope and it can be safely ignored.
+It can still be useful because it is easier to call `off(obsfunc)` instead of `off(observable, f)`
+to release the connection later.
+"""
+mutable struct ObserverFunction <: Function
+    f::Function
+    observable::AbstractObservable
+    weak::Bool
 
-        # Deregister the function f from the observables storing it, once the
-        # SelfDeregisteringFunction is garbage collected.
+    function ObserverFunction(f, observable::AbstractObservable, weak)
+        obsfunc = new(f, observable, weak)
+
+        # If the weak flag is set, deregister the function f from the observable
+        # storing it in its listeners once the ObserverFunction is garbage collected.
         # This should free all resources associated with f unless there
         # is another reference to it somewhere else.
-        finalizer(sdf) do sdf
-            for o in sdf.observables
-                off(o, sdf.f)
+        finalizer(obsfunc) do obsfunc
+            if obsfunc.weak
+                off(obsfunc)
             end
         end
 
-        sdf
+        obsfunc
     end
 end
 
@@ -113,16 +131,16 @@ end
 Adds function `f` as listener to `observable`. Whenever `observable`'s value
 is set via `observable[] = val` `f` is called with `val`.
 """
-function on(f, observable::AbstractObservable)
+function on(f, observable::AbstractObservable; weak = false)
     push!(listeners(observable), f)
     for g in addhandler_callbacks
         g(f, observable)
     end
-    # Return a SelfDeregisteringFunction so that the caller is responsible
+    # Return a ObserverFunction so that the caller is responsible
     # to keep a reference to it around as long as they want the connection to
-    # persist. If the SelfDeregisteringFunction is garbage collected, f will be released from
+    # persist. If the ObserverFunction is garbage collected, f will be released from
     # observable's listeners as well.
-    return SelfDeregisteringFunction(f, Set((observable,)))
+    return ObserverFunction(f, observable, weak)
 end
 
 """
@@ -145,12 +163,22 @@ function off(observable::AbstractObservable, f)
 end
 
 
-function off(observable::AbstractObservable, sdf::SelfDeregisteringFunction)
-    f = sdf.f
-    # remove the function inside sdf as usual
+function off(observable::AbstractObservable, obsfunc::ObserverFunction)
+    f = obsfunc.f
+    # remove the function inside obsfunc as usual
     off(observable, f)
-    # now delete the reference to the observable
-    delete!(sdf.observables, observable)
+end
+
+"""
+    off(obsfunc::ObserverFunction)
+
+Remove the listener function `obsfunc.f` from the listeners of `obsfunc.observable`.
+Once `obsfunc` goes out of scope, this should allow `obsfunc.f` and all the values
+it might have closed over to be garbage collected (unless there
+are other references to it).
+"""
+function off(obsfunc::ObserverFunction)
+    off(obsfunc.observable, obsfunc)
 end
 
 """
@@ -261,21 +289,21 @@ Calls `f` on updates to any observable refs in `args`.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
-function onany(f, args...)
+function onany(f, args...; weak = false)
     callback = OnUpdate(f, args)
 
-    # store all returned SelfDeregisteringFunctions
-    sdfs = SelfDeregisteringFunction[]
+    # store all returned ObserverFunctions
+    obsfuncs = ObserverFunction[]
     for observable in args
         if observable isa AbstractObservable
-            sdf = on(callback, observable)
-            push!(sdfs, sdf)
+            obsfunc = on(callback, observable, weak = weak)
+            push!(obsfuncs, obsfunc)
         end
     end
 
     # same principle as with `on`, this collection needs to be
     # stored by the caller or the connections made will be cut
-    sdfs
+    obsfuncs
 end
 
 struct MapUpdater{F, T} <: InternalFunction

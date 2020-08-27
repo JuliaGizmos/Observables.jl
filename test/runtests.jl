@@ -64,14 +64,14 @@ end
     function create_a_dangling_listener()
         t = ToFinalize(1)
 
-        sdf = on(a) do a
+        obsfunc = on(a; weak = true) do a
             t.val += 1
         end
 
         a[] = 2
         @test t.val == 2
 
-        # sdf falls out of scope here and should deregister the closure
+        # obsfunc falls out of scope here and should deregister the closure
         # when it gets garbage collected, which should in turn free t
         nothing
     end
@@ -83,7 +83,7 @@ end
 
     GC.enable(true)
     GC.gc()
-    # somehow this needs a double sweep, maybe first sdf, then ToFinalize?
+    # somehow this needs a double sweep, maybe first obsfunc, then ToFinalize?
     GC.gc()
     @test isempty(Observables.listeners(a))
     @test memory_cleared[] == true
