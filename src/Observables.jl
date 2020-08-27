@@ -84,6 +84,29 @@ end
 
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
 
+
+mutable struct SelfDeregisteringFunction <: Function
+    f::Function
+    observables::Set{<:AbstractObservable} # use a Set so there are no worries about double entries
+
+    function SelfDeregisteringFunction(f, observables::Set)
+        sdf = new(f, observables)
+
+        # Deregister the function f from the observables storing it, once the
+        # SelfDeregisteringFunction is garbage collected.
+        # This should free all resources associated with f unless there
+        # is another reference to it somewhere else.
+        finalizer(sdf) do sdf
+            for o in sdf.observables
+                off(o, sdf.f)
+            end
+        end
+
+        sdf
+    end
+end
+
+
 """
     on(f, observable::AbstractObservable)
 
@@ -95,7 +118,11 @@ function on(f, observable::AbstractObservable)
     for g in addhandler_callbacks
         g(f, observable)
     end
-    return f
+    # Return a SelfDeregisteringFunction so that the caller is responsible
+    # to keep a reference to it around as long as they want the connection to
+    # persist. If the SelfDeregisteringFunction is garbage collected, f will be released from
+    # observable's listeners as well.
+    return SelfDeregisteringFunction(f, Set((observable,)))
 end
 
 """
@@ -115,6 +142,15 @@ function off(observable::AbstractObservable, f)
         end
     end
     throw(KeyError(f))
+end
+
+
+function off(observable::AbstractObservable, sdf::SelfDeregisteringFunction)
+    f = sdf.f
+    # remove the function inside sdf as usual
+    off(observable, f)
+    # now delete the reference to the observable
+    delete!(sdf.observables, observable)
 end
 
 """
@@ -220,16 +256,26 @@ end
 """
     onany(f, args...)
 
-Calls `f` on updates to any oservable refs in `args`.
+Calls `f` on updates to any observable refs in `args`.
 `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
 function onany(f, args...)
     callback = OnUpdate(f, args)
+
+    # store all returned SelfDeregisteringFunctions
+    sdfs = SelfDeregisteringFunction[]
     for observable in args
-        (observable isa AbstractObservable) && on(callback, observable)
+        if observable isa AbstractObservable
+            sdf = on(callback, observable)
+            push!(sdfs, sdf)
+        end
     end
+
+    # same principle as with `on`, this collection needs to be
+    # stored by the caller or the connections made will be cut
+    sdfs
 end
 
 struct MapUpdater{F, T} <: InternalFunction
