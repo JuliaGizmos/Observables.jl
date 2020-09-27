@@ -103,7 +103,7 @@ It can still be useful because it is easier to call `off(obsfunc)` instead of `o
 to release the connection later.
 """
 mutable struct ObserverFunction <: Function
-    f::Function
+    f
     observable::AbstractObservable
     weak::Bool
 
