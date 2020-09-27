@@ -6,14 +6,20 @@ struct ObservablePair{S, T} <: AbstractObservable{T}
     excluded::Vector{Function}
     function ObservablePair(first::AbstractObservable{S}, second::AbstractObservable{T}; f = identity, g = identity) where {S, T}
         excluded = Function[]
-        first2second = on(first) do val
+
+        # the two observables should trigger each other, but only in one direction
+        # as otherwise there will be an infinite loop of updates
+
+        first2second_observerfunc = on(first) do val
             setindex!(second, f(val), notify = !in(excluded))
         end
-        push!(excluded, first2second)
-        second2first = on(second) do val
+        push!(excluded, first2second_observerfunc.f) # in notify, the wrapped function is compared
+
+        second2first_observerfunc = on(second) do val
             setindex!(first, g(val), notify = !in(excluded))
         end
-        push!(excluded, second2first)
+        push!(excluded, second2first_observerfunc.f)
+
         new{S, T}(first, second, f, g, excluded)
     end
 end
