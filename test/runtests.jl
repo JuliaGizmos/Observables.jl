@@ -44,6 +44,27 @@ end
     @test r2[] == 4
 end
 
+@testset "disconnect observerfuncs" begin
+    
+    x = Observable(1)
+    y = Observable(2)
+    z = Observable(3)
+
+    of1 = on(x) do x
+        println(x)
+    end
+
+    of2_3 = onany(y, z) do y, z
+        println(y, z)
+    end
+
+    off(of1)
+    off.(of2_3)
+    for obs in (x, y, z)
+        @test isempty(obs.listeners)
+    end
+end
+
 # this struct is just supposed to show that a value in memory was released
 mutable struct ToFinalize
     val
