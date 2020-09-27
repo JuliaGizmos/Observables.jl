@@ -44,25 +44,25 @@ end
     @test r2[] == 4
 end
 
+# this struct is just supposed to show that a value in memory was released
+mutable struct ToFinalize
+    val
+
+    function ToFinalize(val, finalized_flag::Ref)
+        tf = new(val)
+        finalizer(tf) do tf
+            finalized_flag[] = true
+        end
+    end
+end
+
 @testset "weak connections" begin
     a = Observable(1)
 
-    memory_cleared = Ref(false)
-
-    # this struct is just supposed to show how a value in memory can be released
-    mutable struct ToFinalize
-        val
-
-        function ToFinalize(val)
-            tf = new(val)
-            finalizer(tf) do tf
-                memory_cleared[] = true
-            end
-        end
-    end
+    finalized_flag = Ref(false)
 
     function create_a_dangling_listener()
-        t = ToFinalize(1)
+        t = ToFinalize(1, finalized_flag)
 
         obsfunc = on(a; weak = true) do a
             t.val += 1
@@ -79,14 +79,14 @@ end
     GC.enable(false)
     create_a_dangling_listener()
     @test length(Observables.listeners(a)) == 1
-    @test memory_cleared[] == false
+    @test finalized_flag[] == false
 
     GC.enable(true)
     GC.gc()
     # somehow this needs a double sweep, maybe first obsfunc, then ToFinalize?
     GC.gc()
     @test isempty(Observables.listeners(a))
-    @test memory_cleared[] == true
+    @test finalized_flag[] == true
 end
 
 @testset "macros" begin
