@@ -130,6 +130,8 @@ end
 
 Adds function `f` as listener to `observable`. Whenever `observable`'s value
 is set via `observable[] = val` `f` is called with `val`.
+
+Returns `true` if `f` could be removed, otherwise `false`.
 """
 function on(f, observable::AbstractObservable; weak = false)
     push!(listeners(observable), f)
@@ -147,6 +149,8 @@ end
     off(observable::AbstractObservable, f)
 
 Removes `f` from listeners of `observable`.
+
+Returns `true` if `f` could be removed, otherwise `false`.
 """
 function off(observable::AbstractObservable, f)
     callbacks = listeners(observable)
@@ -156,10 +160,10 @@ function off(observable::AbstractObservable, f)
             for g in removehandler_callbacks
                 g(observable, f)
             end
-            return
+            return true
         end
     end
-    throw(KeyError(f))
+    return false
 end
 
 

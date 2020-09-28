@@ -13,9 +13,9 @@ using Test
     end
     r[] = 2
 
-    off(r, f)
+    @test off(r, f)
     @test !(f in r.listeners)
-    @test_throws KeyError off(r, f)
+    @test off(r, f) == false
     r[] = 3 # shouldn't call test
 end
 
