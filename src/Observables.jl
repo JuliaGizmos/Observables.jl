@@ -114,8 +114,8 @@ mutable struct ObserverFunction <: Function
         # storing it in its listeners once the ObserverFunction is garbage collected.
         # This should free all resources associated with f unless there
         # is another reference to it somewhere else.
-        finalizer(obsfunc) do obsfunc
-            if obsfunc.weak
+        if obsfunc.weak
+            finalizer(obsfunc) do obsfunc
                 off(obsfunc)
             end
         end
