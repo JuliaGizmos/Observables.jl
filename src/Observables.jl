@@ -126,12 +126,19 @@ end
 
 
 """
-    on(f, observable::AbstractObservable)
+    on(f, observable::AbstractObservable; weak = false)
 
 Adds function `f` as listener to `observable`. Whenever `observable`'s value
 is set via `observable[] = val` `f` is called with `val`.
 
-Returns `true` if `f` could be removed, otherwise `false`.
+Returns an `ObserverFunction` that wraps `f` and `observable` and allows to
+disconnect easily by calling `off(observerfunction)` instead of `off(f, observable)`.
+
+If `weak = true` is set, the new connection will be removed as soon as the returned `ObserverFunction`
+is not referenced anywhere and is garbage collected. This is useful if some parent object
+makes connections to outside observables and stores the resulting `ObserverFunction` instances.
+Then, once that parent object is garbage collected, the weak
+observable connections are removed automatically.
 """
 function on(f, observable::AbstractObservable; weak = false)
     push!(listeners(observable), f)
