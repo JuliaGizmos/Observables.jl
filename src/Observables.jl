@@ -84,24 +84,80 @@ end
 
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
 
+
 """
-    on(f, observable::AbstractObservable)
+    mutable struct ObserverFunction <: Function
+
+Fields:
+
+    f::Function
+    observable::AbstractObservable
+    weak::Bool
+
+`ObserverFunction` is intended as the return value for `on` because
+we can remove the created closure from `obsfunc.observable`'s listener vectors when
+ObserverFunction goes out of scope - as long as the `weak` flag is set.
+If the `weak` flag is not set, nothing happens
+when the ObserverFunction goes out of scope and it can be safely ignored.
+It can still be useful because it is easier to call `off(obsfunc)` instead of `off(observable, f)`
+to release the connection later.
+"""
+mutable struct ObserverFunction <: Function
+    f
+    observable::AbstractObservable
+    weak::Bool
+
+    function ObserverFunction(f, observable::AbstractObservable, weak)
+        obsfunc = new(f, observable, weak)
+
+        # If the weak flag is set, deregister the function f from the observable
+        # storing it in its listeners once the ObserverFunction is garbage collected.
+        # This should free all resources associated with f unless there
+        # is another reference to it somewhere else.
+        if obsfunc.weak
+            finalizer(obsfunc) do obsfunc
+                off(obsfunc)
+            end
+        end
+
+        obsfunc
+    end
+end
+
+
+"""
+    on(f, observable::AbstractObservable; weak = false)
 
 Adds function `f` as listener to `observable`. Whenever `observable`'s value
 is set via `observable[] = val` `f` is called with `val`.
+
+Returns an `ObserverFunction` that wraps `f` and `observable` and allows to
+disconnect easily by calling `off(observerfunction)` instead of `off(f, observable)`.
+
+If `weak = true` is set, the new connection will be removed as soon as the returned `ObserverFunction`
+is not referenced anywhere and is garbage collected. This is useful if some parent object
+makes connections to outside observables and stores the resulting `ObserverFunction` instances.
+Then, once that parent object is garbage collected, the weak
+observable connections are removed automatically.
 """
-function on(f, observable::AbstractObservable)
+function on(f, observable::AbstractObservable; weak = false)
     push!(listeners(observable), f)
     for g in addhandler_callbacks
         g(f, observable)
     end
-    return f
+    # Return a ObserverFunction so that the caller is responsible
+    # to keep a reference to it around as long as they want the connection to
+    # persist. If the ObserverFunction is garbage collected, f will be released from
+    # observable's listeners as well.
+    return ObserverFunction(f, observable, weak)
 end
 
 """
     off(observable::AbstractObservable, f)
 
 Removes `f` from listeners of `observable`.
+
+Returns `true` if `f` could be removed, otherwise `false`.
 """
 function off(observable::AbstractObservable, f)
     callbacks = listeners(observable)
@@ -111,10 +167,29 @@ function off(observable::AbstractObservable, f)
             for g in removehandler_callbacks
                 g(observable, f)
             end
-            return
+            return true
         end
     end
-    throw(KeyError(f))
+    return false
+end
+
+
+function off(observable::AbstractObservable, obsfunc::ObserverFunction)
+    f = obsfunc.f
+    # remove the function inside obsfunc as usual
+    off(observable, f)
+end
+
+"""
+    off(obsfunc::ObserverFunction)
+
+Remove the listener function `obsfunc.f` from the listeners of `obsfunc.observable`.
+Once `obsfunc` goes out of scope, this should allow `obsfunc.f` and all the values
+it might have closed over to be garbage collected (unless there
+are other references to it).
+"""
+function off(obsfunc::ObserverFunction)
+    off(obsfunc.observable, obsfunc)
 end
 
 """
@@ -220,16 +295,26 @@ end
 """
     onany(f, args...)
 
-Calls `f` on updates to any oservable refs in `args`.
+Calls `f` on updates to any observable refs in `args`.
 `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
-function onany(f, args...)
+function onany(f, args...; weak = false)
     callback = OnUpdate(f, args)
+
+    # store all returned ObserverFunctions
+    obsfuncs = ObserverFunction[]
     for observable in args
-        (observable isa AbstractObservable) && on(callback, observable)
+        if observable isa AbstractObservable
+            obsfunc = on(callback, observable, weak = weak)
+            push!(obsfuncs, obsfunc)
+        end
     end
+
+    # same principle as with `on`, this collection needs to be
+    # stored by the caller or the connections made will be cut
+    obsfuncs
 end
 
 struct MapUpdater{F, T} <: InternalFunction

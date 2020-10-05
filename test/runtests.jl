@@ -13,9 +13,9 @@ using Test
     end
     r[] = 2
 
-    off(r, f)
+    @test off(r, f)
     @test !(f in r.listeners)
-    @test_throws KeyError off(r, f)
+    @test off(r, f) == false
     r[] = 3 # shouldn't call test
 end
 
@@ -42,6 +42,72 @@ end
     @test r2[] == 3
     r1[] = 3
     @test r2[] == 4
+end
+
+@testset "disconnect observerfuncs" begin
+    
+    x = Observable(1)
+    y = Observable(2)
+    z = Observable(3)
+
+    of1 = on(x) do x
+        println(x)
+    end
+
+    of2_3 = onany(y, z) do y, z
+        println(y, z)
+    end
+
+    off(of1)
+    off.(of2_3)
+    for obs in (x, y, z)
+        @test isempty(obs.listeners)
+    end
+end
+
+# this struct is just supposed to show that a value in memory was released
+mutable struct ToFinalize
+    val
+
+    function ToFinalize(val, finalized_flag::Ref)
+        tf = new(val)
+        finalizer(tf) do tf
+            finalized_flag[] = true
+        end
+    end
+end
+
+@testset "weak connections" begin
+    a = Observable(1)
+
+    finalized_flag = Ref(false)
+
+    function create_a_dangling_listener()
+        t = ToFinalize(1, finalized_flag)
+
+        obsfunc = on(a; weak = true) do a
+            t.val += 1
+        end
+
+        a[] = 2
+        @test t.val == 2
+
+        # obsfunc falls out of scope here and should deregister the closure
+        # when it gets garbage collected, which should in turn free t
+        nothing
+    end
+
+    GC.enable(false)
+    create_a_dangling_listener()
+    @test length(Observables.listeners(a)) == 1
+    @test finalized_flag[] == false
+
+    GC.enable(true)
+    GC.gc()
+    # somehow this needs a double sweep, maybe first obsfunc, then ToFinalize?
+    GC.gc()
+    @test isempty(Observables.listeners(a))
+    @test finalized_flag[] == true
 end
 
 @testset "macros" begin

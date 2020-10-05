@@ -7,7 +7,7 @@ using Observables
 
 observable = Observable(0)
 
-h = on(observable) do val
+obs_func = on(observable) do val
     println("Got an update: ", val)
 end
 
@@ -22,7 +22,24 @@ observable[]
 To remove a handler use `off` with the return value of `on`:
 
 ```@repl manual
-off(observable, h)
+off(obs_func)
+```
+
+### Weak Connections
+
+If you use `on` with `weak = true`, the connection will be removed when
+the return value of `on` is garbage collected.
+This can make it easier to clean up connections that are not used anymore.
+
+
+```julia
+obs_func = on(observable, weak = true) do val
+    println("Got an update: ", val)
+end
+# as long as obs_func is reachable the connection will stay
+
+obs_func = nothing
+# now garbage collection can at any time clear the connection
 ```
 
 ### Async operations
