@@ -1,6 +1,15 @@
 using Observables
 using Test
 
+@testset "ambiguities" begin
+    if VERSION < v"1.2"  # Julia 1.0 is bad at detecting ambiguities
+    elseif VERSION < v"1.6"
+        @test_broken isempty(detect_ambiguities(Base, Observables))
+    else
+        @test_broken isempty(detect_ambiguities(Observables))
+    end
+end
+
 @testset "listeners" begin
     r = Observable(0)
     @test r[] == 0
@@ -45,7 +54,7 @@ end
 end
 
 @testset "disconnect observerfuncs" begin
-    
+
     x = Observable(1)
     y = Observable(2)
     z = Observable(3)
