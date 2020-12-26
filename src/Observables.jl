@@ -24,6 +24,8 @@ mutable struct Observable{T} <: AbstractObservable{T}
     val::T
     Observable{T}() where {T} = new{T}([])
     Observable{T}(val) where {T} = new{T}([], val)
+    # Construct an Observable{Any} without runtime dispatch
+    Observable{Any}(@nospecialize(val)) = new{Any}([], val)
 end
 
 function Base.copy(observable::Observable{T}) where T
