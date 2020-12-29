@@ -4,9 +4,9 @@ using Test
 @testset "ambiguities" begin
     if VERSION < v"1.2"  # Julia 1.0 is bad at detecting ambiguities
     elseif VERSION < v"1.6"
-        @test_broken isempty(detect_ambiguities(Base, Observables))
+        @test isempty(detect_ambiguities(Base, Observables))
     else
-        @test_broken isempty(detect_ambiguities(Observables))
+        @test isempty(detect_ambiguities(Observables))
     end
 end
 
