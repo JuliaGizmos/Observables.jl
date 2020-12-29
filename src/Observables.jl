@@ -40,12 +40,6 @@ Observable(val::T) where {T} = Observable{T}(val)
 
 observe(x::Observable) = x
 
-# These methods seem backwards: Observable should be swapped with AbstractObservable, because when I ask
-# to convert to a concrete type I expect to get that type.
-# They are also the source of an ambiguity.
-Base.convert(::Type{Observable}, x::AbstractObservable) = x
-Base.convert(::Type{Observable{T}}, x::AbstractObservable{T}) where {T} = x
-
 function Base.convert(::Type{Observable{T}}, x::AbstractObservable) where {T}
     result = Observable{T}(convert(T, x[]))
     on(x) do value
