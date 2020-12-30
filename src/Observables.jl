@@ -24,6 +24,8 @@ mutable struct Observable{T} <: AbstractObservable{T}
     val::T
     Observable{T}() where {T} = new{T}([])
     Observable{T}(val) where {T} = new{T}([], val)
+    # Construct an Observable{Any} without runtime dispatch
+    Observable{Any}(@nospecialize(val)) = new{Any}([], val)
 end
 
 function Base.copy(observable::Observable{T}) where T
@@ -38,9 +40,6 @@ Observable(val::T) where {T} = Observable{T}(val)
 
 observe(x::Observable) = x
 
-Base.convert(::Type{Observable}, x::AbstractObservable) = x
-Base.convert(::Type{Observable{T}}, x::AbstractObservable{T}) where {T} = x
-
 function Base.convert(::Type{Observable{T}}, x::AbstractObservable) where {T}
     result = Observable{T}(convert(T, x[]))
     on(x) do value
@@ -49,6 +48,7 @@ function Base.convert(::Type{Observable{T}}, x::AbstractObservable) where {T}
     return result
 end
 
+Base.convert(::Type{T}, x::T) where {T<:Observable} = x  # resolves ambiguity with convert(::Type{T}, x::T) in base/essentials.jl
 Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
 
 function Base.getproperty(obs::Observable, field::Symbol)
@@ -215,6 +215,11 @@ end
 
 Observable(val::Channel{T}) where {T} = Observable{T}(val)
 Observable(val::Task) = Observable{Any}(val)
+function Observable{Any}(val::Union{Task, Channel})   # ambiguity resolution
+    observable = Observable{Any}()
+    observable[] = val
+    return observable
+end
 function Observable{T}(val::Union{Task, Channel}) where {T}
     observable = Observable{T}()
     observable[] = val
