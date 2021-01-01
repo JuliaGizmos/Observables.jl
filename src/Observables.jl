@@ -64,12 +64,19 @@ function Base.getproperty(obs::Observable, field::Symbol)
 end
 
 """
-    notify!(observable::AbstractObservable)
+    notify(observable::AbstractObservable)
 
-Pushes an updates to all listeners of `observable`
+Update all listeners of `observable`.
 """
-function notify!(observable::AbstractObservable)
-    observable[] = observable[]
+function Base.notify(observable::AbstractObservable)
+    val = observable[]
+    for f in listeners(observable)
+        if f isa InternalFunction
+            f(val)
+        else
+            Base.invokelatest(f, val)
+        end
+    end
     return
 end
 
@@ -199,13 +206,8 @@ Updates the value of an `Observable` to `val` and call its listeners.
 """
 function Base.setindex!(observable::Observable, val)
     observable.val = val
-    for f in listeners(observable)
-        if f isa InternalFunction
-            f(val)
-        else
-            Base.invokelatest(f, val)
-        end
-    end
+    notify(observable)
+    return val
 end
 
 # For external packages that don't want to access an internal field
@@ -452,5 +454,7 @@ end
 methodlist(mi::Core.MethodInstance) = methodlist(Base.unwrap_unionall(mi.specTypes).parameters[1])
 methodlist(obsf::ObserverFunction) = methodlist(obsf.f)
 methodlist(@nospecialize(f::Function)) = methodlist(typeof(f))
+
+@deprecate notify! notify
 
 end # module
