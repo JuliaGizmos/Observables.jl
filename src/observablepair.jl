@@ -3,24 +3,29 @@ struct ObservablePair{S, T} <: AbstractObservable{T}
     second::AbstractObservable{T}
     f
     g
-    excluded::Vector{Function}
+    links::Tuple{ObserverFunction,ObserverFunction}
+
     function ObservablePair(first::AbstractObservable{S}, second::AbstractObservable{T}; f = identity, g = identity) where {S, T}
-        excluded = Function[]
 
         # the two observables should trigger each other, but only in one direction
         # as otherwise there will be an infinite loop of updates
-
-        first2second_observerfunc = on(first) do val
-            setindex!(second, f(val), notify = !in(excluded))
+        done = Ref(false)
+        link1 = on(first) do val
+            if !done[]
+                done[] = true
+                second[] = f(val)
+                done[] = false
+            end
         end
-        push!(excluded, first2second_observerfunc.f) # in notify, the wrapped function is compared
-
-        second2first_observerfunc = on(second) do val
-            setindex!(first, g(val), notify = !in(excluded))
+        link2 = on(second) do val
+            if !done[]
+                done[] = true
+                first[] = g(val)
+                done[] = false
+            end
         end
-        push!(excluded, second2first_observerfunc.f)
 
-        new{S, T}(first, second, f, g, excluded)
+        new{S, T}(first, second, f, g, (link1, link2))
     end
 end
 
@@ -31,7 +36,7 @@ observe(o::ObservablePair) = o.second
 
 function off(o::ObservablePair)
     for i in 1:2
-        off(o[i], o.excluded[i])
+        off(o[i], o.links[i])
     end
 end
 
