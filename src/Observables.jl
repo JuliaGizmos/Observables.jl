@@ -347,9 +347,11 @@ end
 """
     connect!(o1::AbstractObservable, o2::AbstractObservable)
 
-Forwards all updates from `o2` to `o1`
+Forwards all updates from `o2` to `o1`.
+
+See also [`Observables.ObservablePair`](@ref).
 """
-connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o2, o1)
+connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o1, o2)
 
 """
     map(f, observable::AbstractObservable, args...)

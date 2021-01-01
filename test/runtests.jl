@@ -195,6 +195,13 @@ end
     @test cnt[] == 3
 end
 
+@testset "connect!" begin
+    a, b = Observable(""), Observable("")
+    connect!(a, b)
+    b[] = "Hi!"
+    @test a[] == "Hi!"
+end
+
 @testset "throttle" begin
     obs = Observable(1)
     throttled = throttle(2, obs)
