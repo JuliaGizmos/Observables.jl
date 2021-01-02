@@ -120,7 +120,7 @@ mutable struct ObserverFunction <: Function
     observable::AbstractObservable
     weak::Bool
 
-    function ObserverFunction(f, observable::AbstractObservable, weak)
+    function ObserverFunction(@nospecialize(f), observable::AbstractObservable, weak)
         obsfunc = new(f, observable, weak)
 
         # If the weak flag is set, deregister the function f from the observable
@@ -165,7 +165,7 @@ makes connections to outside observables and stores the resulting `ObserverFunct
 Then, once that parent object is garbage collected, the weak
 observable connections are removed automatically.
 """
-function on(f, observable::AbstractObservable; weak = false)
+function on(@nospecialize(f), observable::AbstractObservable; weak::Bool = false)
     push!(listeners(observable), f)
     for g in addhandler_callbacks
         g(f, observable)
@@ -184,7 +184,7 @@ Removes `f` from listeners of `observable`.
 
 Returns `true` if `f` could be removed, otherwise `false`.
 """
-function off(observable::AbstractObservable, f)
+function off(observable::AbstractObservable, @nospecialize(f))
     callbacks = listeners(observable)
     for (i, f2) in enumerate(callbacks)
         if f === f2
@@ -292,9 +292,7 @@ Base.getindex(observable::AbstractObservable) = getindex(observe(observable))
     to_value(x::Union{Any, AbstractObservable})
 Extracts the value of an observable, and returns the object if it's not an observable!
 """
-to_value(observable::AbstractObservable) = observable[]
-to_value(x) = x
-
+to_value(x) = isa(x, AbstractObservable) ? x[] : x  # noninferrable dispatch is faster if there is only one Method
 
 """
     obsid(observable::Observable)
@@ -322,9 +320,12 @@ Calls `f` on updates to any observable refs in `args`.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
-function onany(f, args...; weak = false)
+function onany(f::F, args...; weak::Bool = false) where F
     callback = OnUpdate(f, args)
+    _onany(Base.inferencebarrier(callback), args, weak) # despecialize callback using an inference barrier
+end
 
+@noinline function _onany(@nospecialize(callback), args, weak::Bool)
     # store all returned ObserverFunctions
     obsfuncs = ObserverFunction[]
     for observable in args
@@ -384,8 +385,8 @@ dispatch reasons. `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
-function Base.map(f, observable::AbstractObservable, os...;
-                  init=f(observable[], map(to_value, os)...))
+function Base.map(f::F, observable::AbstractObservable, os...;
+                  init=f(observable[], map(to_value, os)...)) where F
     map!(f, Observable{Any}(init), observable, os...)
 end
 
