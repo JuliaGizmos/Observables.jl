@@ -22,6 +22,8 @@ Like a `Ref` but updates can be watched by adding a handler using `on`.
 mutable struct Observable{T} <: AbstractObservable{T}
     listeners::Vector{Any}
     val::T
+    inputs::Vector{Any}  # for map!ed Observables
+
     Observable{T}() where {T} = new{T}([])
     Observable{T}(val) where {T} = new{T}([], val)
     # Construct an Observable{Any} without runtime dispatch
@@ -57,6 +59,8 @@ function Base.getproperty(obs::Observable, field::Symbol)
     if field === :val
         return getfield(obs, field)
     elseif field === :listeners
+        return getfield(obs, field)
+    elseif field === :inputs
         return getfield(obs, field)
     elseif field === :id
         return obsid(obs)
@@ -131,6 +135,20 @@ mutable struct ObserverFunction <: Function
     end
 end
 
+Base.precompile(obsf::ObserverFunction) = precompile(obsf.f, (eltype(obsf.observable),))
+function Base.precompile(observable::Observable)
+    tf = true
+    T = eltype(observable)
+    for f in observable.listeners
+        precompile(f, (T,))
+    end
+    if isdefined(observable, :inputs)
+        for obsf in observable.inputs
+            tf &= precompile(obsf)
+        end
+    end
+    return tf
+end
 
 """
     on(f, observable::AbstractObservable; weak = false)
@@ -338,8 +356,13 @@ Updates `observable` with the result of calling `f` with values extracted from a
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
-function Base.map!(f, observable::AbstractObservable, os...)
-    onany(MapUpdater(f, observable), os...)
+function Base.map!(f::F, observable::AbstractObservable, os...) where F
+    obsfuncs = onany(MapUpdater(f, observable), os...)
+    if !isdefined(observable, :inputs)
+        observable.inputs = obsfuncs
+    else
+        append!(observable.inputs, obsfuncs)
+    end
     return observable
 end
 
