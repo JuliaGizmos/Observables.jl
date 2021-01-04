@@ -197,18 +197,19 @@ end
 
 Updates the value of an `Observable` to `val` and call its listeners.
 """
-function Base.setindex!(observable::Observable, val; notify=(x)->true)
+function Base.setindex!(observable::Observable, val)
     observable.val = val
     for f in listeners(observable)
-        if notify(f)
-            if f isa InternalFunction
-                f(val)
-            else
-                Base.invokelatest(f, val)
-            end
+        if f isa InternalFunction
+            f(val)
+        else
+            Base.invokelatest(f, val)
         end
     end
 end
+
+# For external packages that don't want to access an internal field
+setexcludinghandlers!(obs::AbstractObservable, val) = observe(obs).val = val
 
 ####################################################
 # tasks & channel api
@@ -226,11 +227,11 @@ function Observable{T}(val::Union{Task, Channel}) where {T}
     return observable
 end
 
-function Base.setindex!(observable::Observable, val_async::Task; notify=x->true)
+function Base.setindex!(observable::Observable, val_async::Task)
     return @async begin
         try
             val = fetch(val_async)
-            setindex!(observable, val, notify=notify)
+            setindex!(observable, val)
         catch e
             Base.showerror(stderr, e)
             Base.show_backtrace(stderr, catch_backtrace())
@@ -238,11 +239,11 @@ function Base.setindex!(observable::Observable, val_async::Task; notify=x->true)
     end
 end
 
-function Base.setindex!(observable::Observable, channel::Channel; notify=x->true)
+function Base.setindex!(observable::Observable, channel::Channel)
     return @async begin
         try
             for val in channel
-                setindex!(observable, val, notify=notify)
+                setindex!(observable, val)
                 yield()
             end
         catch e
@@ -252,12 +253,8 @@ function Base.setindex!(observable::Observable, channel::Channel; notify=x->true
     end
 end
 
-function Base.setindex!(observable::AbstractObservable, val; notify=x->true)
-    Base.setindex!(observe(observable), val; notify=notify)
-end
-
-function setexcludinghandlers(observable::AbstractObservable, val, pred=x->true)
-    setindex!(observable, val; notify=pred)
+function Base.setindex!(observable::AbstractObservable, val)
+    Base.setindex!(observe(observable), val)
 end
 
 """
