@@ -25,7 +25,10 @@ function observe(::S) where {S<:AbstractObservable}
 end
 
 """
-Like a `Ref` but updates can be watched by adding a handler using `on`.
+    obs = Observable(val)
+    obs = Observable{T}(val)
+
+Like a `Ref`, but updates can be watched by adding a handler using [`on`](@ref) or [`map`](@ref).
 """
 mutable struct Observable{T} <: AbstractObservable{T}
     listeners::Vector{Any}
@@ -162,16 +165,33 @@ end
     on(f, observable::AbstractObservable; weak = false)
 
 Adds function `f` as listener to `observable`. Whenever `observable`'s value
-is set via `observable[] = val` `f` is called with `val`.
+is set via `observable[] = val`, `f` is called with `val`.
 
-Returns an `ObserverFunction` that wraps `f` and `observable` and allows to
+Returns an [`ObserverFunction`](@ref) that wraps `f` and `observable` and allows to
 disconnect easily by calling `off(observerfunction)` instead of `off(f, observable)`.
+If instead you want to compute a new `Observable` from an old one, use [`map(f, ::Observable)`](@ref).
 
 If `weak = true` is set, the new connection will be removed as soon as the returned `ObserverFunction`
 is not referenced anywhere and is garbage collected. This is useful if some parent object
 makes connections to outside observables and stores the resulting `ObserverFunction` instances.
 Then, once that parent object is garbage collected, the weak
 observable connections are removed automatically.
+
+# Example
+
+```jldoctest; setup=:(using Observables)
+julia> obs = Observable(0)
+Observable{$Int} with 0 listeners. Value:
+0
+
+julia> on(obs) do val
+           println("current value is ", val)
+       end
+(::Observables.ObserverFunction) (generic function with 0 methods)
+
+julia> obs[] = 5;
+current value is 5
+```
 """
 function on(@nospecialize(f), observable::AbstractObservable; weak::Bool = false)
     push!(listeners(observable), f)
@@ -305,7 +325,7 @@ to_value(x) = isa(x, AbstractObservable) ? x[] : x  # noninferrable dispatch is 
 """
     obsid(observable::Observable)
 
-Gets a unique id for an observable!
+Gets a unique id for an observable.
 """
 obsid(observable::Observable) = string(objectid(observable))
 obsid(observable::AbstractObservable) = obsid(observe(observable))
@@ -327,6 +347,8 @@ Calls `f` on updates to any observable refs in `args`.
 `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
+
+See also: [`on`](@ref).
 """
 function onany(f::F, args...; weak::Bool = false) where F
     callback = OnUpdate(f, args)
@@ -366,6 +388,35 @@ Updates `observable` with the result of calling `f` with values extracted from a
 All other objects in `args` are passed as-is.
 
 By default `observable` gets updated immediately, but this can be suppressed by specifying `update=false`.
+
+# Example
+
+We'll create an observable that can hold an arbitrary number:
+
+```jldoctest map!; setup=:(using Observables)
+julia> obs = Observable{Number}(3)
+Observable{Number} with 0 listeners. Value:
+3
+```
+
+Now,
+
+```jldoctest map!
+julia> obsrt1 = map(sqrt, obs)
+Observable{Float64} with 0 listeners. Value:
+1.7320508075688772
+```
+
+creates an `Observable{Float64}`, which will fail to update if we set `obs[] = 3+4im`.
+However,
+
+```jldoctest map!
+julia> obsrt2 = map!(sqrt, Observable{Number}(), obs)
+Observable{Number} with 0 listeners. Value:
+1.7320508075688772
+```
+
+can handle any number type for which `sqrt` is defined.
 """
 @inline function Base.map!(f::F, observable::AbstractObservable, os...; update::Bool=true) where F
     # note: the @inline prevents de-specialization due to the splatting
@@ -396,15 +447,28 @@ See also [`Observables.ObservablePair`](@ref).
 connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o1, o2)
 
 """
-    map(f, observable::AbstractObservable, args...)
+    obs = map(f, arg1::AbstractObservable, args...)
 
-Creates a new observable ref which contains the result of `f` applied to
-values extracted from args. The second argument `observable` must be an observable ref for
-dispatch reasons. `args` may contain any number of `Observable` objects.
+Creates a new observable ref `obs` which contains the result of `f` applied to values
+extracted from `arg1` and `args` (i.e., `f(arg1[], ...)`.
+`arg1` must be an observable ref for dispatch reasons. `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
+
+If you don't need the value of `obs`, and just want to run `f` whenever the
+arguments update, use [`on`](@ref) or [`onany`](@ref) instead.
+
+# Example
+
+```jldoctest; setup=:(using Observables)
+julia> obs = Observable([1,2,3]);
+
+julia> map(length, obs)
+Observable{$Int} with 0 listeners. Value:
+3
+```
 """
-@inline function Base.map(f::F, observable::AbstractObservable, os...; kwargs...) where F
+@inline function Base.map(f::F, arg1::AbstractObservable, args...; kwargs...) where F
     # note: the @inline prevents de-specialization due to the splatting
     if haskey(kwargs, :init)
         Base.depwarn("""
@@ -415,23 +479,9 @@ All other objects in `args` are passed as-is.
                 `map!(f, Observable{T}(), args...)`.
             """, :map)
         dest = Observable{Any}(kwargs[:init])
-        return map!(f, dest, observable, os...; update=false)
+        return map!(f, dest, arg1, args...; update=false)
     end
-    map!(f, Observable(f(observable[], map(to_value, os)...)), observable, os...; update=false)
-end
-
-"""
-    map(f, Observable{T}, args...)
-
-Creates an `Observable{T}` containing the result of calling `f` with values extracted from args.
-`args` may contain any number of `Observable` objects.
-`f` will be passed the values contained in the refs as the respective argument.
-All other objects in `args` are passed as-is.
-"""
-@inline function Base.map(f::F, ::Type{Observable{T}}, os...) where {F, T}
-    # note: the @inline prevents de-specialization due to the splatting
-    dest = Observable{T}(f(map(to_value, os)...))
-    map!(f, dest, os...; update=false)
+    map!(f, Observable(f(arg1[], map(to_value, args)...)), arg1, args...; update=false)
 end
 
 """
