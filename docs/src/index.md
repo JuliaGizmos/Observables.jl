@@ -1,22 +1,23 @@
 # Observables
 
-Observables are like `Ref`s but you can listen to changes.
+Observables are like `Ref`s:
 
 ```@repl manual
 using Observables
 
 observable = Observable(0)
 
+observable[]
+```
+
+But unlike `Ref`s,  but you can listen for changes:
+
+```@repl manual
 obs_func = on(observable) do val
     println("Got an update: ", val)
 end
 
 observable[] = 42
-```
-
-To get the value of an observable index it with no arguments
-```@repl manual
-observable[]
 ```
 
 To remove a handler use `off` with the return value of `on`:
@@ -45,19 +46,29 @@ obs_func = nothing
 ### Async operations
 
 #### Delay an update
-```julia
+
+```@repl manual
 x = Observable(1)
 y = map(x) do val
     @async begin
-        sleep(0.5)
+        sleep(1.5)
         return val + 1
     end
 end
+tstart = time()
+onany(x, y) do xval, yval
+    println("At ", time()-tstart, ", we have x = ", xval, " and y = ", yval)
+end
+sleep(3)
+x[] = 5
+sleep(3)
 ```
 
 #### Multiply updates
-If you want to fire several events on an update (e.g. for interpolating animations), you can use a channel:
-```julia
+
+If you want to fire several events on an update (e.g., for interpolating animations), you can use a channel:
+
+```@repl manual
 x = Observable(1)
 y = map(x) do val
     Channel() do channel
@@ -65,16 +76,14 @@ y = map(x) do val
             put!(channel, i + val)
         end
     end
-end
+end; on(y) do val
+    println("updated to ", val)
+end; sleep(2)
 ```
 
-#### The same works for constructing observables
+Similarly, you can construct the Observable from a `Channel`:
 
 ```julia
-Observable(@async begin
-    sleep(0.5)
-    return 1 + 1
-end)
 Observable(Channel() do channel
     for i in 1:10
         put!(channel, i + 1)
@@ -97,7 +106,7 @@ Modules = [Observables]
 Private = false
 ```
 
-### Internal
+### Extensions of Base methods or internal methods
 
 ```@autodocs
 Modules = [Observables]
