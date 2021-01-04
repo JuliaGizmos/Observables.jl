@@ -145,6 +145,20 @@ end
     @test finalized_flag[] == true
 end
 
+@testset "world age" begin
+    # issue #50
+    obs = Observable(0)
+    t = @task for n=1:10
+        obs[] = n
+        sleep(0.1)
+    end
+    schedule(t)
+    sleep(0.1)
+    map(x->2x, obs)
+    sleep(0.2)
+    @test !istaskfailed(t)
+end
+
 @testset "macros" begin
     a = Observable(2)
     b = Observable(3)

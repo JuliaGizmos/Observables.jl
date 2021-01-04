@@ -17,9 +17,6 @@ const removehandler_callbacks = []
 
 abstract type AbstractObservable{T} end
 
-# Internal function that doesn't need invokelatest!
-abstract type InternalFunction <: Function end
-
 function observe(::S) where {S<:AbstractObservable}
     error("observe not defined for AbstractObservable $S")
 end
@@ -88,11 +85,7 @@ Update all listeners of `observable`.
 function Base.notify(observable::AbstractObservable)
     val = observable[]
     for f in listeners(observable)
-        if f isa InternalFunction
-            f(val)
-        else
-            Base.invokelatest(f, val)
-        end
+        Base.invokelatest(f, val)
     end
     return
 end
@@ -333,7 +326,7 @@ obsid(observable::AbstractObservable) = obsid(observe(observable))
 listeners(observable::Observable) = observable.listeners
 listeners(observable::AbstractObservable) = listeners(observe(observable))
 
-struct OnUpdate{F, Args} <: InternalFunction
+struct OnUpdate{F, Args} <: Function
     f::F
     args::Args
 end
@@ -370,7 +363,7 @@ end
     obsfuncs
 end
 
-struct MapUpdater{F, T} <: InternalFunction
+struct MapUpdater{F, T} <: Function
     f::F
     observable::Observable{T}
 end
