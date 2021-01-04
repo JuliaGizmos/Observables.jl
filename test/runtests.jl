@@ -28,7 +28,7 @@ end
     r[] = 3 # shouldn't call test
 end
 
-@testset "onany" begin
+@testset "onany and map" begin
     r = Observable(0)
     tested = Ref(false)
     onany(1, r) do x, y
@@ -42,15 +42,25 @@ end
     r1 = Observable(0)
     r2 = Observable(0)
     map!(x->x+1, r2, r1)
+    @test r2[] == 1
+    r2 = Observable(0)
+    map!(x->x+1, r2, r1; update=false)
     @test r2[] == 0
     r1[] = 1
     @test r2[] == 2
 
     r1 = Observable(2)
-    r2 = map(+, r1, 1)
-    @test r2[] == 3
+    r2 = @inferred(map(+, r1, 1))
+    @test r2[] === 3
+    @test eltype(r2) === Int
     r1[] = 3
     @test r2[] == 4
+
+    r3 = @inferred(map!(+, Observable{Float32}(), r1, 1))
+    @test r3[] === 4.0f0
+    @test eltype(r3) === Float32
+    r1[] = 4
+    @test r3[] === 5.0f0
 
     # Make sure `precompile` doesn't error
     precompile(r1)
@@ -129,27 +139,22 @@ end
     @test c isa Observable
     @test c[] == 5
     a[] = 100
-    sleep(0.1)
     @test c[] == 103
 
     a = Observable(2)
     b = Observable(3)
     c = Observable(10)
     Observables.@map! c &a + &b
-    sleep(0.1)
-    @test c[] == 10
+    @test c[] == 5
     a[] = 100
-    sleep(0.1)
     @test c[] == 103
 
     a = Observable(2)
     b = Observable(3)
     c = Observable(10)
     Observables.@on c[] = &a + &b
-    sleep(0.1)
     @test c[] == 10
     a[] = 100
-    sleep(0.1)
     @test c[] == 103
 end
 
@@ -373,4 +378,12 @@ end
     @test occursin("runtests.jl:$line3", string(m))
     obsf3 = on(sqrt, obs)
     @test Observables.methodlist(obsf3).mt.name === :sqrt
+end
+
+@testset "deprecations" begin
+    a = Observable(1)
+    b = @test_deprecated map(sqrt, a; init=13.0)
+    @test b[] == 13.0
+    a[] = 4
+    @test b[] == 2.0
 end
