@@ -208,6 +208,9 @@ function Base.setindex!(observable::Observable, val)
     end
 end
 
+# For external packages that don't want to access an internal field
+setexcludinghandlers!(obs::AbstractObservable, val) = observe(obs).val = val
+
 ####################################################
 # tasks & channel api
 
