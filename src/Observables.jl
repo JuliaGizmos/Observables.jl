@@ -438,4 +438,19 @@ include("flatten.jl")
 include("time.jl")
 include("macros.jl")
 
+# Look up the source location of `do` block Observable MethodInstances
+function methodlist(@nospecialize(ft::Type))
+    if ft <: OnUpdate
+        ft = Base.unwrap_unionall(Base.unwrap_unionall(ft).parameters[1])
+        if ft <: MapUpdater
+            ft = Base.unwrap_unionall(Base.unwrap_unionall(ft).parameters[1])
+        end
+    end
+    return Base.MethodList(ft.name.mt)
+end
+
+methodlist(mi::Core.MethodInstance) = methodlist(Base.unwrap_unionall(mi.specTypes).parameters[1])
+methodlist(obsf::ObserverFunction) = methodlist(obsf.f)
+methodlist(@nospecialize(f::Function)) = methodlist(typeof(f))
+
 end # module

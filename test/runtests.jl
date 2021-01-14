@@ -343,3 +343,31 @@ end
     obs[] = 1
     @test obs_copy[] == 1
 end
+
+@testset "methodlist" begin
+    _only(list) = (@assert length(list) == 1; return list[1])  # `only` is avail in Julia 1.4+
+    obs = Observable(1)
+    obsf = on(obs) do x
+        x + 1
+    end
+    line1 = -2 + @__LINE__
+    obs2 = map(obs) do x
+        x + 1
+    end
+    line2 = -2 + @__LINE__
+    obsflist = onany(obs, 5) do x, y
+        x + y
+    end
+    line3 = -2 + @__LINE__
+    obsf2 = _only(obsflist)
+    m = _only(Observables.methodlist(obsf).ms)
+    @test occursin("runtests.jl:$line1", string(m))
+    m = _only(Observables.methodlist(obsf.f).ms)
+    @test occursin("runtests.jl:$line1", string(m))
+    m = _only(Observables.methodlist(obs.listeners[2]).ms)
+    @test occursin("runtests.jl:$line2", string(m))
+    m = _only(Observables.methodlist(obsf2).ms)
+    @test occursin("runtests.jl:$line3", string(m))
+    obsf3 = on(sqrt, obs)
+    @test Observables.methodlist(obsf3).mt.name === :sqrt
+end
