@@ -1,6 +1,6 @@
 name = "Observables"
 uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
-version = "0.3.3"
+version = "0.4.0"
 
 [compat]
 julia = "1"
