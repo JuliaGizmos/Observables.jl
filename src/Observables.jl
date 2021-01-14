@@ -38,6 +38,8 @@ end
 
 Observable(val::T) where {T} = Observable{T}(val)
 
+Base.eltype(::AbstractObservable{T}) where {T} = T
+
 observe(x::Observable) = x
 
 function Base.convert(::Type{Observable{T}}, x::AbstractObservable) where {T}
@@ -121,10 +123,8 @@ mutable struct ObserverFunction <: Function
         # storing it in its listeners once the ObserverFunction is garbage collected.
         # This should free all resources associated with f unless there
         # is another reference to it somewhere else.
-        if obsfunc.weak
-            finalizer(obsfunc) do obsfunc
-                off(obsfunc)
-            end
+        if weak
+            finalizer(off, obsfunc)
         end
 
         obsfunc
@@ -365,8 +365,6 @@ function Base.map(f, observable::AbstractObservable, os...;
                   init=f(observable[], map(to_value, os)...))
     map!(f, Observable{Any}(init), observable, os...)
 end
-
-Base.eltype(::AbstractObservable{T}) where {T} = T
 
 """
     async_latest(observable::AbstractObservable, n=1)
