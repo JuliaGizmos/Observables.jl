@@ -4,6 +4,14 @@ export Observable, on, off, onany, connect!, obsid, async_latest, throttle
 
 import Base.Iterators.filter
 
+# @nospecialize "blocks" codegen but not necessarily inference. This forces inference
+# to drop specific information about an argument.
+if isdefined(Base, :inferencebarrier)
+    const inferencebarrier = Base.inferencebarrier
+else
+    inferencebarrier(x) = Ref{Any}(x)[]
+end
+
 const addhandler_callbacks = []
 const removehandler_callbacks = []
 
@@ -322,7 +330,7 @@ All other objects in `args` are passed as-is.
 """
 function onany(f::F, args...; weak::Bool = false) where F
     callback = OnUpdate(f, args)
-    _onany(Base.inferencebarrier(callback), args, weak) # despecialize callback using an inference barrier
+    _onany(inferencebarrier(callback), args, weak)
 end
 
 @noinline function _onany(@nospecialize(callback), args, weak::Bool)
