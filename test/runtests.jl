@@ -51,6 +51,9 @@ end
     @test r2[] == 3
     r1[] = 3
     @test r2[] == 4
+
+    # Make sure `precompile` doesn't error
+    precompile(r1)
 end
 
 @testset "disconnect observerfuncs" begin
