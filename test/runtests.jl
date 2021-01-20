@@ -10,6 +10,19 @@ using Test
     end
 end
 
+@testset "construct and show" begin
+    obs = Observable(5)
+    @test string(obs) == "Observable{$Int} with 0 listeners. Value:\n5"
+    on(identity, obs)
+    @test string(obs) == "Observable{$Int} with 1 listeners. Value:\n5"
+    on(x->nothing, obs)
+    @test string(obs) == "Observable{$Int} with 2 listeners. Value:\n5"
+    obs[] = 7
+    @test string(obs) == "Observable{$Int} with 2 listeners. Value:\n7"
+    obs = Observable{Any}()
+    @test string(obs) == "Observable{Any} with 0 listeners. Value:\nnot assigned yet!"
+end
+
 @testset "listeners" begin
     r = Observable(0)
     @test r[] == 0

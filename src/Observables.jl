@@ -99,7 +99,7 @@ function Base.show(io::IO, x::Observable{T}) where T
     if isdefined(x, :val)
         show(io, x.val)
     else
-        println(io, "not assigned yet!")
+        print(io, "not assigned yet!")
     end
 end
 
