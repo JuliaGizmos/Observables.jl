@@ -358,15 +358,26 @@ function (mu::MapUpdater)(args...)
 end
 
 """
-    map!(f, observable::AbstractObservable, args...)
+    map!(f, observable::AbstractObservable, args...; update::Bool=true)
 
 Updates `observable` with the result of calling `f` with values extracted from args.
 `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
+
+By default `observable` gets updated immediately, but this can be suppressed by specifying `update=false`.
 """
-function Base.map!(f::F, observable::AbstractObservable, os...) where F
+@inline function Base.map!(f::F, observable::AbstractObservable, os...; update::Bool=true) where F
+    # note: the @inline prevents de-specialization due to the splatting
     obsfuncs = onany(MapUpdater(f, observable), os...)
+    appendinputs!(observable, obsfuncs)
+    if update
+        observable[] = f(map(to_value, os)...)
+    end
+    return observable
+end
+
+function appendinputs!(observable, obsfuncs)  # latency: separating this from map! allows dropping the specialization on `f`
     if !isdefined(observable, :inputs)
         observable.inputs = obsfuncs
     else
@@ -393,9 +404,34 @@ dispatch reasons. `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 """
-function Base.map(f::F, observable::AbstractObservable, os...;
-                  init=f(observable[], map(to_value, os)...)) where F
-    map!(f, Observable{Any}(init), observable, os...)
+@inline function Base.map(f::F, observable::AbstractObservable, os...; kwargs...) where F
+    # note: the @inline prevents de-specialization due to the splatting
+    if haskey(kwargs, :init)
+        Base.depwarn("""
+            the `init` keyword is deprecated, and the new implementation does not force `Observable{Any}` (it will use the output of `f`).
+            Instead of `map(f, args...; init=initval)`, use
+                `map!(f, Observable{T}(initval), args...; update=false)`
+            To control just the eltype, use
+                `map!(f, Observable{T}(), args...)`.
+            """, :map)
+        dest = Observable{Any}(kwargs[:init])
+        return map!(f, dest, observable, os...; update=false)
+    end
+    map!(f, Observable(f(observable[], map(to_value, os)...)), observable, os...; update=false)
+end
+
+"""
+    map(f, Observable{T}, args...)
+
+Creates an `Observable{T}` containing the result of calling `f` with values extracted from args.
+`args` may contain any number of `Observable` objects.
+`f` will be passed the values contained in the refs as the respective argument.
+All other objects in `args` are passed as-is.
+"""
+@inline function Base.map(f::F, ::Type{Observable{T}}, os...) where {F, T}
+    # note: the @inline prevents de-specialization due to the splatting
+    dest = Observable{T}(f(map(to_value, os)...))
+    map!(f, dest, os...; update=false)
 end
 
 """
