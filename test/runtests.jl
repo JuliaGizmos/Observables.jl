@@ -156,7 +156,7 @@ end
     sleep(0.1)
     map(x->2x, obs)
     sleep(0.2)
-    @test !istaskfailed(t)
+    @test t.state !== :failed # !istaskfailed(t) is only available on Julia 1.3+
 end
 
 @testset "macros" begin
