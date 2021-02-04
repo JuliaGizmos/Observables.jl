@@ -185,6 +185,29 @@ end
     @test c[] == 103
 end
 
+@testset "latest_change" begin
+    o = Observable(0)
+    latest = latest_change(o)
+    latest_approx = latest_change(o, (x,y) -> abs(x-y) < 2)
+    @test eltype(latest) == eltype(latest_approx) == Int
+    @test latest[] == latest_approx[] == 0
+
+    latest_values = Int[]
+    latest_approx_values = Int[]
+    on(latest) do v
+        push!(latest_values, v)
+    end
+    on(latest_approx) do v
+        push!(latest_approx_values, v)
+    end
+
+    for i in 1:100
+        o[] = floor(Int, i/10)
+    end
+    @test latest_values == 1:10
+    @test latest_approx_values == 2:2:10
+end
+
 @testset "async_latest" begin
     o = Observable(0)
     cnt = Ref(0)

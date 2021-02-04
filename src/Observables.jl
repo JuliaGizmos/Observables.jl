@@ -1,6 +1,6 @@
 module Observables
 
-export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+export Observable, on, off, onany, connect!, obsid, latest_change, async_latest, throttle
 
 import Base.Iterators.filter
 
@@ -475,6 +475,47 @@ Observable{$Int} with 0 listeners. Value:
         return map!(f, dest, arg1, args...; update=false)
     end
     map!(f, Observable(f(arg1[], map(to_value, args)...)), arg1, args...; update=false)
+end
+
+"""
+    latest = latest_change(observable::AbstractObservable, eq=(==))
+
+Return an `Observable` which updates with the value of `observable` whenever the new value
+differs from the current value of `latest` according to the equality operator `eq`.
+
+# Example:
+```
+julia> observable = Observable(0);
+
+julia> o_latest = latest_change(observable);
+
+julia> on(observable) do o
+           println("observable[] == \$o")
+       end
+(::Observables.ObserverFunction) (generic function with 0 methods)
+
+julia> on(o_latest) do o
+           println("o_latest[] == \$o")
+       end
+(::Observables.ObserverFunction) (generic function with 0 methods)
+
+julia> observable[] = 0;
+observable[] == 0
+
+julia> observable[] = 1;
+o_latest[] == 1
+observable[] == 1
+
+julia> observable[] = 1;
+observable[] == 1
+```
+"""
+function latest_change(obs::AbstractObservable{T}, eq=(==)) where T
+    out = Observable{T}(obs[])
+    on(obs) do val
+        eq(val, out[]) || (out[] = val)
+    end
+    out
 end
 
 """
