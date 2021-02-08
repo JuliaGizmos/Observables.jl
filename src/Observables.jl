@@ -513,7 +513,9 @@ observable[] == 1
 function latest_change(obs::AbstractObservable{T}, eq=(==)) where T
     out = Observable{T}(obs[])
     on(obs) do val
-        eq(val, out[]) || (out[] = val)
+        if !eq(val, out[])
+            out[] = val
+        end
     end
     out
 end
