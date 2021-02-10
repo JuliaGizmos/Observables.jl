@@ -192,20 +192,20 @@ end
     @test eltype(changes) == eltype(changes_approx) == Int
     @test changes[] == changes_approx[] == 0
 
-    latest_values = Int[]
-    latest_approx_values = Int[]
+    values = Int[]
+    values_approx = Int[]
     on(changes) do v
-        push!(latest_values, v)
+        push!(values, v)
     end
     on(changes_approx) do v
-        push!(latest_approx_values, v)
+        push!(values_approx, v)
     end
 
     for i in 1:100
         o[] = floor(Int, i/10)
     end
-    @test latest_values == 1:10
-    @test latest_approx_values == 2:2:10
+    @test values == 1:10
+    @test values_approx == 2:2:10
 end
 
 @testset "async_latest" begin
