@@ -1,6 +1,6 @@
 module Observables
 
-export Observable, on, off, onany, connect!, obsid, latest_change, async_latest, throttle
+export Observable, on, off, onany, connect!, obsid, observe_changes, async_latest, throttle
 
 import Base.Iterators.filter
 
@@ -478,39 +478,37 @@ Observable{$Int} with 0 listeners. Value:
 end
 
 """
-    latest = latest_change(observable::AbstractObservable, eq=(==))
+    obs = observe_changes(arg::AbstractObservable, eq=(==))
 
-Return an `Observable` which updates with the value of `observable` whenever the new value
-differs from the current value of `latest` according to the equality operator `eq`.
+Returns an `Observable` which updates with the value of `arg` whenever the new value
+differs from the current value of `obs` according to the equality operator `eq`.
 
 # Example:
 ```
-julia> observable = Observable(0);
+julia> obs = Observable(0);
 
-julia> o_latest = latest_change(observable);
+julia> obs_change = observe_changes(obs);
 
-julia> on(observable) do o
-           println("observable[] == \$o")
-       end
-(::Observables.ObserverFunction) (generic function with 0 methods)
+julia> on(obs) do o
+           println("obs[] == \$o")
+       end;
 
-julia> on(o_latest) do o
-           println("o_latest[] == \$o")
-       end
-(::Observables.ObserverFunction) (generic function with 0 methods)
+julia> on(obs_change) do o
+           println("obs_change[] == \$o")
+       end;
 
-julia> observable[] = 0;
-observable[] == 0
+julia> obs[] = 0;
+obs[] == 0
 
-julia> observable[] = 1;
-o_latest[] == 1
-observable[] == 1
+julia> obs[] = 1;
+obs_change[] == 1
+obs[] == 1
 
-julia> observable[] = 1;
-observable[] == 1
+julia> obs[] = 1;
+obs[] == 1
 ```
 """
-function latest_change(obs::AbstractObservable{T}, eq=(==)) where T
+function observe_changes(obs::AbstractObservable{T}, eq=(==)) where T
     out = Observable{T}(obs[])
     on(obs) do val
         if !eq(val, out[])

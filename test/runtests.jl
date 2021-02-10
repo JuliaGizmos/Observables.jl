@@ -185,19 +185,19 @@ end
     @test c[] == 103
 end
 
-@testset "latest_change" begin
+@testset "observe_changes" begin
     o = Observable(0)
-    latest = latest_change(o)
-    latest_approx = latest_change(o, (x,y) -> abs(x-y) < 2)
-    @test eltype(latest) == eltype(latest_approx) == Int
-    @test latest[] == latest_approx[] == 0
+    changes = observe_changes(o)
+    changes_approx = observe_changes(o, (x,y) -> abs(x-y) < 2)
+    @test eltype(changes) == eltype(changes_approx) == Int
+    @test changes[] == changes_approx[] == 0
 
     latest_values = Int[]
     latest_approx_values = Int[]
-    on(latest) do v
+    on(changes) do v
         push!(latest_values, v)
     end
-    on(latest_approx) do v
+    on(changes_approx) do v
         push!(latest_approx_values, v)
     end
 
