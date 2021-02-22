@@ -1,6 +1,6 @@
 module Observables
 
-export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+export Observable, on, off, onany, connect!, obsid, observe_changes, async_latest, throttle
 
 import Base.Iterators.filter
 
@@ -475,6 +475,47 @@ Observable{$Int} with 0 listeners. Value:
         return map!(f, dest, arg1, args...; update=false)
     end
     map!(f, Observable(f(arg1[], map(to_value, args)...)), arg1, args...; update=false)
+end
+
+"""
+    obs = observe_changes(arg::AbstractObservable, eq=(==))
+
+Returns an `Observable` which updates with the value of `arg` whenever the new value
+differs from the current value of `obs` according to the equality operator `eq`.
+
+# Example:
+```
+julia> obs = Observable(0);
+
+julia> obs_change = observe_changes(obs);
+
+julia> on(obs) do o
+           println("obs[] == \$o")
+       end;
+
+julia> on(obs_change) do o
+           println("obs_change[] == \$o")
+       end;
+
+julia> obs[] = 0;
+obs[] == 0
+
+julia> obs[] = 1;
+obs_change[] == 1
+obs[] == 1
+
+julia> obs[] = 1;
+obs[] == 1
+```
+"""
+function observe_changes(obs::AbstractObservable{T}, eq=(==)) where T
+    out = Observable{T}(obs[])
+    on(obs) do val
+        if !eq(val, out[])
+            out[] = val
+        end
+    end
+    out
 end
 
 """
