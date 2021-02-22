@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Home · Observables.jl</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">Observables.jl</span></div><form class="docs-search" action="search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li class="is-active"><a class="tocitem" href>Home</a><ul class="internal"><li><a class="tocitem" href="#API"><span>API</span></a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Home</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Home</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/JuliaGizmos/Observables.jl/blob/master/docs/src/index.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Observables"><a class="docs-heading-anchor" href="#Observables">Observables</a><a id="Observables-1"></a><a class="docs-heading-anchor-permalink" href="#Observables" title="Permalink"></a></h1><p>Observables are like <code>Ref</code>s:</p><pre><code class="language-julia-repl">julia&gt; using Observables
+
+julia&gt; observable = Observable(0)
+Observable{Int64} with 0 listeners. Value:
+0
+
+julia&gt; observable[]
+0</code></pre><p>But unlike <code>Ref</code>s,  but you can listen for changes:</p><pre><code class="language-julia-repl">julia&gt; obs_func = on(observable) do val
+           println(&quot;Got an update: &quot;, val)
+       end
+(::Observables.ObserverFunction) (generic function with 0 methods)
+
+julia&gt; observable[] = 42
+Got an update: 42
+42</code></pre><p>To remove a handler use <code>off</code> with the return value of <code>on</code>:</p><pre><code class="language-julia-repl">julia&gt; off(obs_func)
+true</code></pre><h3 id="Weak-Connections"><a class="docs-heading-anchor" href="#Weak-Connections">Weak Connections</a><a id="Weak-Connections-1"></a><a class="docs-heading-anchor-permalink" href="#Weak-Connections" title="Permalink"></a></h3><p>If you use <code>on</code> with <code>weak = true</code>, the connection will be removed when the return value of <code>on</code> is garbage collected. This can make it easier to clean up connections that are not used anymore.</p><pre><code class="language-julia">obs_func = on(observable, weak = true) do val
+    println(&quot;Got an update: &quot;, val)
+end
+# as long as obs_func is reachable the connection will stay
+
+obs_func = nothing
+# now garbage collection can at any time clear the connection</code></pre><h3 id="Async-operations"><a class="docs-heading-anchor" href="#Async-operations">Async operations</a><a id="Async-operations-1"></a><a class="docs-heading-anchor-permalink" href="#Async-operations" title="Permalink"></a></h3><h4 id="Delay-an-update"><a class="docs-heading-anchor" href="#Delay-an-update">Delay an update</a><a id="Delay-an-update-1"></a><a class="docs-heading-anchor-permalink" href="#Delay-an-update" title="Permalink"></a></h4><pre><code class="language-julia-repl">julia&gt; x = Observable(1)
+Observable{Int64} with 0 listeners. Value:
+1
+
+julia&gt; y = map(x) do val
+           @async begin
+               sleep(1.5)
+               return val + 1
+           end
+       end
+Observable{Any} with 0 listeners. Value:
+not assigned yet!
+
+julia&gt; tstart = time()
+1.61399743663802e9
+
+julia&gt; onany(x, y) do xval, yval
+           println(&quot;At &quot;, time()-tstart, &quot;, we have x = &quot;, xval, &quot; and y = &quot;, yval)
+       end
+2-element Array{Observables.ObserverFunction,1}:
+ Observables.ObserverFunction(Observables.OnUpdate{Main.ex-manual.var&quot;#7#8&quot;,Tuple{Observable{Int64},Observable{Any}}}(Main.ex-manual.var&quot;#7#8&quot;(), (Observable{Int64} with 2 listeners. Value:
+1, Observable{Any} with 1 listeners. Value:
+not assigned yet!)), Observable{Int64} with 2 listeners. Value:
+1, false)
+ Observables.ObserverFunction(Observables.OnUpdate{Main.ex-manual.var&quot;#7#8&quot;,Tuple{Observable{Int64},Observable{Any}}}(Main.ex-manual.var&quot;#7#8&quot;(), (Observable{Int64} with 2 listeners. Value:
+1, Observable{Any} with 1 listeners. Value:
+not assigned yet!)), Observable{Any} with 1 listeners. Value:
+not assigned yet!, false)
+
+julia&gt; sleep(3)
+At 1.4774608612060547, we have x = 1 and y = 2
+
+julia&gt; x[] = 5
+At 3.6661758422851562, we have x = 5 and y = 2
+5
+
+julia&gt; sleep(3)
+At 5.169271945953369, we have x = 5 and y = 6</code></pre><h4 id="Multiply-updates"><a class="docs-heading-anchor" href="#Multiply-updates">Multiply updates</a><a id="Multiply-updates-1"></a><a class="docs-heading-anchor-permalink" href="#Multiply-updates" title="Permalink"></a></h4><p>If you want to fire several events on an update (e.g., for interpolating animations), you can use a channel:</p><pre><code class="language-julia-repl">julia&gt; x = Observable(1)
+Observable{Int64} with 0 listeners. Value:
+1
+
+julia&gt; y = map(x) do val
+           Channel() do channel
+               for i in 1:10
+                   put!(channel, i + val)
+               end
+           end
+       end; on(y) do val
+           println(&quot;updated to &quot;, val)
+       end; sleep(2)
+updated to 2
+updated to 3
+updated to 4
+updated to 5
+updated to 6
+updated to 7
+updated to 8
+updated to 9
+updated to 10
+updated to 11</code></pre><p>Similarly, you can construct the Observable from a <code>Channel</code>:</p><pre><code class="language-julia">Observable(Channel() do channel
+    for i in 1:10
+        put!(channel, i + 1)
+    end
+end)</code></pre><h3 id="How-is-it-different-from-Reactive.jl?"><a class="docs-heading-anchor" href="#How-is-it-different-from-Reactive.jl?">How is it different from Reactive.jl?</a><a id="How-is-it-different-from-Reactive.jl?-1"></a><a class="docs-heading-anchor-permalink" href="#How-is-it-different-from-Reactive.jl?" title="Permalink"></a></h3><p>The main difference is <code>Signal</code>s are manipulated mostly by converting one signal to another. For example, with signals, you can construct a changing UI by creating a <code>Signal</code> of UI objects and rendering them as the signal changes. On the other hand, you can use an Observable both as an input and an output. You can arbitrarily attach outputs to inputs allowing structuring code in a <a href="http://doc.qt.io/qt-4.8/signalsandslots.html">signals-and-slots</a> kind of pattern.</p><p>Another difference is Observables are synchronous, Signals are asynchronous. Observables may be better suited for an imperative style of programming.</p><h2 id="API"><a class="docs-heading-anchor" href="#API">API</a><a id="API-1"></a><a class="docs-heading-anchor-permalink" href="#API" title="Permalink"></a></h2><h3 id="Public"><a class="docs-heading-anchor" href="#Public">Public</a><a id="Public-1"></a><a class="docs-heading-anchor-permalink" href="#Public" title="Permalink"></a></h3><article class="docstring"><header><a class="docstring-binding" id="Observables.Observable" href="#Observables.Observable"><code>Observables.Observable</code></a> — <span class="docstring-category">Type</span></header><section><div><pre><code class="language-julia">obs = Observable(val)
+obs = Observable{T}(val)</code></pre><p>Like a <code>Ref</code>, but updates can be watched by adding a handler using <a href="#Observables.on-Tuple{Any,Observables.AbstractObservable}"><code>on</code></a> or <a href="#Base.map-Union{Tuple{F}, Tuple{F,Observables.AbstractObservable,Vararg{Any,N} where N}} where F"><code>map</code></a>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L24-L29">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.async_latest-Union{Tuple{Observables.AbstractObservable{T}}, Tuple{T}, Tuple{Observables.AbstractObservable{T},Any}} where T" href="#Observables.async_latest-Union{Tuple{Observables.AbstractObservable{T}}, Tuple{T}, Tuple{Observables.AbstractObservable{T},Any}} where T"><code>Observables.async_latest</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">async_latest(observable::AbstractObservable, n=1)</code></pre><p>Returns an <code>Observable</code> which drops all but the last <code>n</code> updates to <code>observable</code> if processing the updates takes longer than the interval between updates.</p><p>This is useful if you want to pass the updates from, say, a slider to a plotting function that takes a while to compute. The plot will directly compute the last frame skipping the intermediate ones.</p><p><strong>Example:</strong></p><pre><code class="language-none">observable = Observable(0)
+function compute_something(x)
+    for i=1:10^8 rand() end # simulate something expensive
+    println(&quot;updated with $x&quot;)
+end
+o_latest = async_latest(observable, 1)
+on(compute_something, o_latest) # compute something on the latest update
+
+for i=1:5
+    observable[] = i
+end</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L521-L547">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.connect!-Tuple{Observables.AbstractObservable,Observables.AbstractObservable}" href="#Observables.connect!-Tuple{Observables.AbstractObservable,Observables.AbstractObservable}"><code>Observables.connect!</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">connect!(o1::AbstractObservable, o2::AbstractObservable)</code></pre><p>Forwards all updates from <code>o2</code> to <code>o1</code>.</p><p>See also <a href="@ref"><code>Observables.ObservablePair</code></a>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L433-L439">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.observe_changes-Union{Tuple{Observables.AbstractObservable{T}}, Tuple{T}, Tuple{Observables.AbstractObservable{T},Any}} where T" href="#Observables.observe_changes-Union{Tuple{Observables.AbstractObservable{T}}, Tuple{T}, Tuple{Observables.AbstractObservable{T},Any}} where T"><code>Observables.observe_changes</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">obs = observe_changes(arg::AbstractObservable, eq=(==))</code></pre><p>Returns an <code>Observable</code> which updates with the value of <code>arg</code> whenever the new value differs from the current value of <code>obs</code> according to the equality operator <code>eq</code>.</p><p><strong>Example:</strong></p><pre><code class="language-none">julia&gt; obs = Observable(0);
+
+julia&gt; obs_change = observe_changes(obs);
+
+julia&gt; on(obs) do o
+           println(&quot;obs[] == $o&quot;)
+       end;
+
+julia&gt; on(obs_change) do o
+           println(&quot;obs_change[] == $o&quot;)
+       end;
+
+julia&gt; obs[] = 0;
+obs[] == 0
+
+julia&gt; obs[] = 1;
+obs_change[] == 1
+obs[] == 1
+
+julia&gt; obs[] = 1;
+obs[] == 1</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L480-L510">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.obsid-Tuple{Observable}" href="#Observables.obsid-Tuple{Observable}"><code>Observables.obsid</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">obsid(observable::Observable)</code></pre><p>Gets a unique id for an observable.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L318-L322">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.off-Tuple{Observables.AbstractObservable,Any}" href="#Observables.off-Tuple{Observables.AbstractObservable,Any}"><code>Observables.off</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">off(observable::AbstractObservable, f)</code></pre><p>Removes <code>f</code> from listeners of <code>observable</code>.</p><p>Returns <code>true</code> if <code>f</code> could be removed, otherwise <code>false</code>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L201-L207">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.off-Tuple{Observables.ObserverFunction}" href="#Observables.off-Tuple{Observables.ObserverFunction}"><code>Observables.off</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">off(obsfunc::ObserverFunction)</code></pre><p>Remove the listener function <code>obsfunc.f</code> from the listeners of <code>obsfunc.observable</code>. Once <code>obsfunc</code> goes out of scope, this should allow <code>obsfunc.f</code> and all the values it might have closed over to be garbage collected (unless there are other references to it).</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L229-L236">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.on-Tuple{Any,Observables.AbstractObservable}" href="#Observables.on-Tuple{Any,Observables.AbstractObservable}"><code>Observables.on</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">on(f, observable::AbstractObservable; weak = false)</code></pre><p>Adds function <code>f</code> as listener to <code>observable</code>. Whenever <code>observable</code>&#39;s value is set via <code>observable[] = val</code>, <code>f</code> is called with <code>val</code>.</p><p>Returns an <a href="#Observables.ObserverFunction"><code>ObserverFunction</code></a> that wraps <code>f</code> and <code>observable</code> and allows to disconnect easily by calling <code>off(observerfunction)</code> instead of <code>off(f, observable)</code>. If instead you want to compute a new <code>Observable</code> from an old one, use <a href="#Base.map-Union{Tuple{F}, Tuple{F,Observables.AbstractObservable,Vararg{Any,N} where N}} where F"><code>map(f, ::Observable)</code></a>.</p><p>If <code>weak = true</code> is set, the new connection will be removed as soon as the returned <code>ObserverFunction</code> is not referenced anywhere and is garbage collected. This is useful if some parent object makes connections to outside observables and stores the resulting <code>ObserverFunction</code> instances. Then, once that parent object is garbage collected, the weak observable connections are removed automatically.</p><p><strong>Example</strong></p><pre><code class="language-julia-repl">julia&gt; obs = Observable(0)
+Observable{Int64} with 0 listeners. Value:
+0
+
+julia&gt; on(obs) do val
+           println(&quot;current value is &quot;, val)
+       end
+(::Observables.ObserverFunction) (generic function with 0 methods)
+
+julia&gt; obs[] = 5;
+current value is 5</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L157-L188">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.onany-Union{Tuple{F}, Tuple{F,Vararg{Any,N} where N}} where F" href="#Observables.onany-Union{Tuple{F}, Tuple{F,Vararg{Any,N} where N}} where F"><code>Observables.onany</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">onany(f, args...)</code></pre><p>Calls <code>f</code> on updates to any observable refs in <code>args</code>. <code>args</code> may contain any number of <code>Observable</code> objects. <code>f</code> will be passed the values contained in the refs as the respective argument. All other objects in <code>args</code> are passed as-is.</p><p>See also: <a href="#Observables.on-Tuple{Any,Observables.AbstractObservable}"><code>on</code></a>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L336-L345">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.throttle-Union{Tuple{T}, Tuple{Any,Observables.AbstractObservable{T}}} where T" href="#Observables.throttle-Union{Tuple{T}, Tuple{Any,Observables.AbstractObservable{T}}} where T"><code>Observables.throttle</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">throttle(dt, input::AbstractObservable)</code></pre><p>Throttle a signal to update at most once every <code>dt</code> seconds. The throttled signal holds the last update of the <code>input</code> signal during each <code>dt</code> second time window.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/time.jl#L1-L6">source</a></section></article><h3 id="Extensions-of-Base-methods-or-internal-methods"><a class="docs-heading-anchor" href="#Extensions-of-Base-methods-or-internal-methods">Extensions of Base methods or internal methods</a><a id="Extensions-of-Base-methods-or-internal-methods-1"></a><a class="docs-heading-anchor-permalink" href="#Extensions-of-Base-methods-or-internal-methods" title="Permalink"></a></h3><article class="docstring"><header><a class="docstring-binding" id="Observables.ObserverFunction" href="#Observables.ObserverFunction"><code>Observables.ObserverFunction</code></a> — <span class="docstring-category">Type</span></header><section><div><pre><code class="language-julia">mutable struct ObserverFunction &lt;: Function</code></pre><p>Fields:</p><pre><code class="language-none">f::Function
+observable::AbstractObservable
+weak::Bool</code></pre><p><code>ObserverFunction</code> is intended as the return value for <code>on</code> because we can remove the created closure from <code>obsfunc.observable</code>&#39;s listener vectors when ObserverFunction goes out of scope - as long as the <code>weak</code> flag is set. If the <code>weak</code> flag is not set, nothing happens when the ObserverFunction goes out of scope and it can be safely ignored. It can still be useful because it is easier to call <code>off(obsfunc)</code> instead of <code>off(observable, f)</code> to release the connection later.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L105-L121">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Base.getindex-Tuple{Observable}" href="#Base.getindex-Tuple{Observable}"><code>Base.getindex</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">observable[]</code></pre><p>Returns the current value of <code>observable</code>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L301-L305">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Base.map!-Union{Tuple{F}, Tuple{F,Observables.AbstractObservable,Vararg{Any,N} where N}} where F" href="#Base.map!-Union{Tuple{F}, Tuple{F,Observables.AbstractObservable,Vararg{Any,N} where N}} where F"><code>Base.map!</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">map!(f, observable::AbstractObservable, args...; update::Bool=true)</code></pre><p>Updates <code>observable</code> with the result of calling <code>f</code> with values extracted from args. <code>args</code> may contain any number of <code>Observable</code> objects. <code>f</code> will be passed the values contained in the refs as the respective argument. All other objects in <code>args</code> are passed as-is.</p><p>By default <code>observable</code> gets updated immediately, but this can be suppressed by specifying <code>update=false</code>.</p><p><strong>Example</strong></p><p>We&#39;ll create an observable that can hold an arbitrary number:</p><pre><code class="language-julia-repl">julia&gt; obs = Observable{Number}(3)
+Observable{Number} with 0 listeners. Value:
+3</code></pre><p>Now,</p><pre><code class="language-julia-repl">julia&gt; obsrt1 = map(sqrt, obs)
+Observable{Float64} with 0 listeners. Value:
+1.7320508075688772</code></pre><p>creates an <code>Observable{Float64}</code>, which will fail to update if we set <code>obs[] = 3+4im</code>. However,</p><pre><code class="language-julia-repl">julia&gt; obsrt2 = map!(sqrt, Observable{Number}(), obs)
+Observable{Number} with 0 listeners. Value:
+1.7320508075688772</code></pre><p>can handle any number type for which <code>sqrt</code> is defined.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L375-L413">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Base.map-Union{Tuple{F}, Tuple{F,Observables.AbstractObservable,Vararg{Any,N} where N}} where F" href="#Base.map-Union{Tuple{F}, Tuple{F,Observables.AbstractObservable,Vararg{Any,N} where N}} where F"><code>Base.map</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">obs = map(f, arg1::AbstractObservable, args...)</code></pre><p>Creates a new observable ref <code>obs</code> which contains the result of <code>f</code> applied to values extracted from <code>arg1</code> and <code>args</code> (i.e., <code>f(arg1[], ...)</code>. <code>arg1</code> must be an observable ref for dispatch reasons. <code>args</code> may contain any number of <code>Observable</code> objects. <code>f</code> will be passed the values contained in the refs as the respective argument. All other objects in <code>args</code> are passed as-is.</p><p>If you don&#39;t need the value of <code>obs</code>, and just want to run <code>f</code> whenever the arguments update, use <a href="#Observables.on-Tuple{Any,Observables.AbstractObservable}"><code>on</code></a> or <a href="#Observables.onany-Union{Tuple{F}, Tuple{F,Vararg{Any,N} where N}} where F"><code>onany</code></a> instead.</p><p><strong>Example</strong></p><pre><code class="language-julia-repl">julia&gt; obs = Observable([1,2,3]);
+
+julia&gt; map(length, obs)
+Observable{Int64} with 0 listeners. Value:
+3</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L442-L463">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Base.notify-Tuple{Observables.AbstractObservable}" href="#Base.notify-Tuple{Observables.AbstractObservable}"><code>Base.notify</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">notify(observable::AbstractObservable)</code></pre><p>Update all listeners of <code>observable</code>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L80-L84">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Base.setindex!-Tuple{Observable,Any}" href="#Base.setindex!-Tuple{Observable,Any}"><code>Base.setindex!</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">observable[] = val</code></pre><p>Updates the value of an <code>Observable</code> to <code>val</code> and call its listeners.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L241-L245">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.to_value-Tuple{Any}" href="#Observables.to_value-Tuple{Any}"><code>Observables.to_value</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">to_value(x::Union{Any, AbstractObservable})</code></pre><p>Extracts the value of an observable, and returns the object if it&#39;s not an observable!</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/Observables.jl#L312-L315">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.@map!-Tuple{Any,Any}" href="#Observables.@map!-Tuple{Any,Any}"><code>Observables.@map!</code></a> — <span class="docstring-category">Macro</span></header><section><div><pre><code class="language-julia">@map!(d, expr)</code></pre><p>Wrap <code>AbstractObservables</code> in <code>&amp;</code> to compute expression <code>expr</code> using their value: the expression will be computed every time the <code>AbstractObservables</code> are updated and <code>d</code> will be set to match that value.</p><p><strong>Examples</strong></p><pre><code class="language-none">julia&gt; a = Observable(2);
+
+julia&gt; b = Observable(3);
+
+julia&gt; c = Observable(10);
+
+julia&gt; Observables.@map! c &amp;a + &amp;b;
+
+julia&gt; c[]
+10
+
+julia&gt; a[] = 100
+100
+
+julia&gt; c[]
+103</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/macros.jl#L57-L83">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.@map-Tuple{Any}" href="#Observables.@map-Tuple{Any}"><code>Observables.@map</code></a> — <span class="docstring-category">Macro</span></header><section><div><pre><code class="language-julia">@map(expr)</code></pre><p>Wrap <code>AbstractObservables</code> in <code>&amp;</code> to compute expression <code>expr</code> using their value. The expression will be computed when <code>@map</code> is called and  every time the <code>AbstractObservables</code> are updated.</p><p><strong>Examples</strong></p><pre><code class="language-none">julia&gt; a = Observable(2);
+
+julia&gt; b = Observable(3);
+
+julia&gt; c = Observables.@map &amp;a + &amp;b;
+
+julia&gt; c[]
+5
+
+julia&gt; a[] = 100
+100
+
+julia&gt; c[]
+103</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/macros.jl#L23-L47">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Observables.@on-Tuple{Any}" href="#Observables.@on-Tuple{Any}"><code>Observables.@on</code></a> — <span class="docstring-category">Macro</span></header><section><div><pre><code class="language-julia">@on(expr)</code></pre><p>Wrap <code>AbstractObservables</code> in <code>&amp;</code> to execute expression <code>expr</code> using their value. The expression will be computed every time the <code>AbstractObservables</code> are updated.</p><p><strong>Examples</strong></p><pre><code class="language-none">julia&gt; a = Observable(2);
+
+julia&gt; b = Observable(3);
+
+julia&gt; Observables.@on println(&quot;The sum of a+b is $(&amp;a + &amp;b)&quot;);
+
+julia&gt; a[] = 100;
+The sum of a+b is 103</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaGizmos/Observables.jl/blob/0f94e69cabddd87fcf057fb95ed5dc64be9661de/src/macros.jl#L93-L111">source</a></section></article></article><nav class="docs-footer"><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Monday 22 February 2021 12:37">Monday 22 February 2021</span>. Using Julia version 1.4.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
