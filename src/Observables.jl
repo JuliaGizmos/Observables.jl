@@ -365,7 +365,7 @@ end
 
 struct MapUpdater{F, T} <: Function
     f::F
-    observable::Observable{T}
+    observable::AbstractObservable{T}
 end
 
 function (mu::MapUpdater)(args...)
