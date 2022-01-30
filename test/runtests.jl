@@ -208,6 +208,18 @@ end
     @test values_approx == 2:2:10
 end
 
+@testset "ChangeObservable" begin
+    co = ChangeObservable(0)
+    values = Int[]
+    on(co) do v
+        push!(values, v)
+    end
+    for i in 1:100
+        co[] = floor(Int, i/10)
+    end
+    @test values == 1:10
+end
+
 @testset "async_latest" begin
     o = Observable(0)
     cnt = Ref(0)

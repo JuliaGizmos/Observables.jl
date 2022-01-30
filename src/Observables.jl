@@ -1,6 +1,7 @@
 module Observables
 
 export Observable, on, off, onany, connect!, obsid, observe_changes, async_latest, throttle
+export ChangeObservable, AbstractObservable
 
 import Base.Iterators.filter
 
@@ -93,7 +94,7 @@ end
 function Base.show(io::IO, x::Observable{T}) where T
     println(io, "Observable{$T} with $(length(x.listeners)) listeners. Value:")
     if isdefined(x, :val)
-        show(io, x.val)
+        show(io, x[])
     else
         print(io, "not assigned yet!")
     end
@@ -365,7 +366,7 @@ end
 
 struct MapUpdater{F, T} <: Function
     f::F
-    observable::Observable{T}
+    observable::AbstractObservable{T}
 end
 
 function (mu::MapUpdater)(args...)
@@ -421,7 +422,7 @@ can handle any number type for which `sqrt` is defined.
     return observable
 end
 
-function appendinputs!(observable, obsfuncs)  # latency: separating this from map! allows dropping the specialization on `f`
+function appendinputs!(observable::Observable, obsfuncs)  # latency: separating this from map! allows dropping the specialization on `f`
     if !isdefined(observable, :inputs)
         observable.inputs = obsfuncs
     else
@@ -589,6 +590,7 @@ include("observablepair.jl")
 include("flatten.jl")
 include("time.jl")
 include("macros.jl")
+include("change.jl")
 
 # Look up the source location of `do` block Observable MethodInstances
 function methodlist(@nospecialize(ft::Type))
