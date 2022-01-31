@@ -47,6 +47,8 @@ function Base.copy(observable::Observable{T}) where T
     return result
 end
 
+Base.close(obs::Observable) = empty!(obs.listeners)
+
 Observable(val::T) where {T} = Observable{T}(val)
 
 Base.eltype(::AbstractObservable{T}) where {T} = T
