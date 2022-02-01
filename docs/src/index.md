@@ -10,11 +10,11 @@ observable = Observable(0)
 observable[]
 ```
 
-But unlike `Ref`s,  but you can listen for changes:
+But unlike `Ref`s,  but you can listen for assignments:
 
 ```@repl manual
 obs_func = on(observable) do val
-    println("Got an update: ", val)
+    println("Got an assignment: ", val)
 end
 
 observable[] = 42
@@ -25,6 +25,25 @@ To remove a handler use `off` with the return value of `on`:
 ```@repl manual
 off(obs_func)
 ```
+
+If you wish to only listen to changes, a `ChangeObservable` can be used
+
+
+```@repl manual
+using Observables
+
+change_obs = ChangeObservable(0)
+
+obs_func = on(change_obs) do val
+    println("The value changed: ", val)
+end
+
+change_obs[] = 42 # the listener will print
+change_obs[] = 42 # no print
+change_obs[] = 43 # the listener will print
+```
+
+A `ChangeObservable` is backed by two `Observables` and stores two sets of values.
 
 ### Weak Connections
 
