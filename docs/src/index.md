@@ -28,7 +28,6 @@ off(obs_func)
 
 If you wish to only listen to changes, a `ChangeObservable` can be used
 
-
 ```@repl manual
 using Observables
 
@@ -44,6 +43,24 @@ change_obs[] = 43 # the listener will print
 ```
 
 A `ChangeObservable` is backed by two `Observables` and stores two sets of values.
+
+Or to selectively do either, `observe_changes` can be used
+
+```@repl manual
+observable = Observable(0)
+
+obs_change = observe_changes(observable);
+
+obs_func = on(observable) do val
+    println("Got an assignment: ", val)
+end
+
+obs_change_func = on(obs_change) do val
+    println("The value changed: ", val)
+end
+
+observable[] = 42
+```
 
 ### Weak Connections
 
