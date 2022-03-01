@@ -3,6 +3,7 @@ module Observables
 export Observable, on, off, onany, connect!, obsid, observe_changes, async_latest, throttle
 
 import Base.Iterators.filter
+Base.Experimental.@max_methods 1
 
 # @nospecialize "blocks" codegen but not necessarily inference. This forces inference
 # to drop specific information about an argument.
@@ -82,7 +83,7 @@ end
 
 Update all listeners of `observable`.
 """
-function Base.notify(observable::AbstractObservable)
+function Base.notify(@nospecialize(observable::AbstractObservable))
     val = observable[]
     for f in listeners(observable)
         Base.invokelatest(f, val)
@@ -186,7 +187,7 @@ julia> obs[] = 5;
 current value is 5
 ```
 """
-function on(@nospecialize(f), observable::AbstractObservable; weak::Bool = false)
+function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false)
     push!(listeners(observable), f)
     for g in addhandler_callbacks
         g(f, observable)
@@ -249,51 +250,6 @@ function Base.setindex!(observable::Observable, val)
     return val
 end
 
-# For external packages that don't want to access an internal field
-setexcludinghandlers!(obs::AbstractObservable, val) = observe(obs).val = val
-
-####################################################
-# tasks & channel api
-
-Observable(val::Channel{T}) where {T} = Observable{T}(val)
-Observable(val::Task) = Observable{Any}(val)
-function Observable{Any}(val::Union{Task, Channel})   # ambiguity resolution
-    observable = Observable{Any}()
-    observable[] = val
-    return observable
-end
-function Observable{T}(val::Union{Task, Channel}) where {T}
-    observable = Observable{T}()
-    observable[] = val
-    return observable
-end
-
-function Base.setindex!(observable::Observable, val_async::Task)
-    return @async begin
-        try
-            val = fetch(val_async)
-            setindex!(observable, val)
-        catch e
-            Base.showerror(stderr, e)
-            Base.show_backtrace(stderr, catch_backtrace())
-        end
-    end
-end
-
-function Base.setindex!(observable::Observable, channel::Channel)
-    return @async begin
-        try
-            for val in channel
-                setindex!(observable, val)
-                yield()
-            end
-        catch e
-            Base.showerror(stderr, e)
-            Base.show_backtrace(stderr, catch_backtrace())
-        end
-    end
-end
-
 function Base.setindex!(observable::AbstractObservable, val)
     Base.setindex!(observe(observable), val)
 end
@@ -326,13 +282,6 @@ obsid(observable::AbstractObservable) = obsid(observe(observable))
 listeners(observable::Observable) = observable.listeners
 listeners(observable::AbstractObservable) = listeners(observe(observable))
 
-struct OnUpdate{F, Args} <: Function
-    f::F
-    args::Args
-end
-
-(ou::OnUpdate)(_) = ou.f(map(to_value, ou.args)...)
-
 """
     onany(f, args...)
 
@@ -343,9 +292,9 @@ All other objects in `args` are passed as-is.
 
 See also: [`on`](@ref).
 """
-function onany(f::F, args...; weak::Bool = false) where F
-    callback = OnUpdate(f, args)
-    _onany(inferencebarrier(callback), args, weak)
+function onany(@nospecialize(f), args...; weak::Bool = false)
+    ff = (_) -> f(to_value.(args)...)
+    _onany(inferencebarrier(ff), args, weak)
 end
 
 @noinline function _onany(@nospecialize(callback), args, weak::Bool)
@@ -357,19 +306,9 @@ end
             push!(obsfuncs, obsfunc)
         end
     end
-
     # same principle as with `on`, this collection needs to be
     # stored by the caller or the connections made will be cut
     obsfuncs
-end
-
-struct MapUpdater{F, T} <: Function
-    f::F
-    observable::Observable{T}
-end
-
-function (mu::MapUpdater)(args...)
-    mu.observable[] = mu.f(args...)
 end
 
 """
@@ -411,9 +350,11 @@ Observable{Number} with 0 listeners. Value:
 
 can handle any number type for which `sqrt` is defined.
 """
-@inline function Base.map!(f::F, observable::AbstractObservable, os...; update::Bool=true) where F
+@inline function Base.map!(@nospecialize(f), observable::AbstractObservable, os...; update::Bool=true)
     # note: the @inline prevents de-specialization due to the splatting
-    obsfuncs = onany(MapUpdater(f, observable), os...)
+    obsfuncs = onany(os...) do args...
+        observable[] = Base.invokelatest(f, args...)
+    end
     appendinputs!(observable, obsfuncs)
     if update
         observable[] = f(map(to_value, os)...)
@@ -461,19 +402,8 @@ Observable{$Int} with 0 listeners. Value:
 3
 ```
 """
-@inline function Base.map(f::F, arg1::AbstractObservable, args...; kwargs...) where F
+@inline function Base.map(f::F, arg1::AbstractObservable, args...) where F
     # note: the @inline prevents de-specialization due to the splatting
-    if haskey(kwargs, :init)
-        Base.depwarn("""
-            the `init` keyword is deprecated, and the new implementation does not force `Observable{Any}` (it will use the output of `f`).
-            Instead of `map(f, args...; init=initval)`, use
-                `map!(f, Observable{T}(initval), args...; update=false)`
-            To control just the eltype, use
-                `map!(f, Observable{T}(), args...)`.
-            """, :map)
-        dest = Observable{Any}(kwargs[:init])
-        return map!(f, dest, arg1, args...; update=false)
-    end
     map!(f, Observable(f(arg1[], map(to_value, args)...)), arg1, args...; update=false)
 end
 
@@ -592,12 +522,6 @@ include("macros.jl")
 
 # Look up the source location of `do` block Observable MethodInstances
 function methodlist(@nospecialize(ft::Type))
-    if ft <: OnUpdate
-        ft = Base.unwrap_unionall(Base.unwrap_unionall(ft).parameters[1])
-        if ft <: MapUpdater
-            ft = Base.unwrap_unionall(Base.unwrap_unionall(ft).parameters[1])
-        end
-    end
     return Base.MethodList(ft.name.mt)
 end
 
