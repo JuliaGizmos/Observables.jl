@@ -1,6 +1,15 @@
 using Observables
 using Test
 
+@testset "on(f; update=true)" begin
+    obs = Observable(0)
+    y = Observable(0)
+    on(obs; update=true) do x
+        y[] += 1
+    end
+    @test y[] == 1
+end
+
 @testset "PriorityObservable" begin
     po = PriorityObservable(0)
 

@@ -227,7 +227,7 @@ julia> obs[] = 5;
 current value is 5
 ```
 """
-function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority = 0)
+function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority = 0, update=false)
     ls = listeners(observable)
     if observable.use_priority
         idx = findfirst(((prio, x),)-> prio < priority, ls)
@@ -241,6 +241,9 @@ function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); wea
     end
     for g in addhandler_callbacks
         g(f, observable)
+    end
+    if update
+        f(observable[])
     end
     # Return a ObserverFunction so that the caller is responsible
     # to keep a reference to it around as long as they want the connection to
