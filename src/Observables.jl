@@ -454,14 +454,14 @@ Observable{$Int} with 0 listeners. Value:
 3
 ```
 """
-@inline function Base.map(f::F, arg1::AbstractObservable, args...) where F
+@inline function Base.map(f::F, arg1::AbstractObservable, args...; change_observable=false) where F
     # note: the @inline prevents de-specialization due to the splatting
-    map!(f, Observable(f(arg1[], map(to_value, args)...)), arg1, args...; update=false)
+    obs = Observable(f(arg1[], map(to_value, args)...))
+    obs.ignore_equal_values = change_observable
+    map!(f, obs, arg1, args...; update=false)
+    return obs
 end
 
-function observe_changes(obs::AbstractObservable{T}, eq=(==)) where T
-
-end
 
 """
     async_latest(observable::AbstractObservable, n=1)

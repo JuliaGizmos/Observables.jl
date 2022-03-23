@@ -61,6 +61,18 @@ end
         x[] = [2,3]
         @test y[] == 1
     end
+    @testset "map" begin
+        x = Observable(0)
+        obs = map(identity, x; change_observable=true)
+        y = Observable(0)
+        on(obs) do x
+            y[] += 1
+        end
+        x[] = 0
+        @test y[] == 0
+        x[] = 1
+        @test y[] == 1
+    end
 end
 
 @testset "ambiguities" begin
