@@ -1,6 +1,7 @@
 module Observables
 
 export Observable, on, off, onany, connect!, obsid, observe_changes, async_latest, throttle
+export Consume, PriorityObservable, ChangeObservable
 
 import Base.Iterators.filter
 Base.Experimental.@max_methods 1
@@ -29,15 +30,33 @@ end
 Like a `Ref`, but updates can be watched by adding a handler using [`on`](@ref) or [`map`](@ref).
 """
 mutable struct Observable{T} <: AbstractObservable{T}
-    listeners::Vector{Any}
-    val::T
-    inputs::Vector{Any}  # for map!ed Observables
 
-    Observable{T}() where {T} = new{T}([])
-    Observable{T}(val) where {T} = new{T}([], val)
+    listeners::Vector{Pair{Int, Any}}
+    inputs::Vector{Any}  # for map!ed Observables
+    use_priority::Bool
+    ignore_equal_values::Bool
+    val::T
+
+    function Observable{T}() where {T}
+        return new{T}(Pair{Int, Any}[], [], false, false)
+    end
+    function Observable{T}(val) where {T}
+        return new{T}(Pair{Int, Any}[], [], false, false, val)
+    end
     # Construct an Observable{Any} without runtime dispatch
-    Observable{Any}(@nospecialize(val)) = new{Any}([], val)
+    function Observable{Any}(@nospecialize(val))
+        return new{Any}(Pair{Int, Any}[], [], false, false, val)
+    end
 end
+
+function PriorityObservable(val::T) where T
+    obs = Observable{T}(val)
+    obs.use_priority = true
+    return obs
+end
+
+ignore_equal_values(obs::Observable) = obs.ignore_equal_values
+ignore_equal_values(obs::AbstractObservable) = false
 
 function Base.copy(observable::Observable{T}) where T
     result = Observable{T}(observable[])
@@ -48,6 +67,31 @@ function Base.copy(observable::Observable{T}) where T
 end
 
 Observable(val::T) where {T} = Observable{T}(val)
+
+
+"""
+    obs = ChangeObservable(value)
+
+Returns an `Observable` which updates with the value of `arg` whenever the new value
+differs from the current value of `obs` according to the equality (==).
+
+# Example:
+```
+julia> obs = ChangeObservable(0);
+julia> on(obs) do o
+           println("obs_change[] == \$o")
+       end;
+julia> obs[] = 0;
+julia> obs[] = 1;
+obs_change[] == 1
+julia> obs[] = 1;
+```
+"""
+function ChangeObservable(val::T) where T
+    obs = Observable{T}(val)
+    obs.ignore_equal_values = true
+    return obs
+end
 
 Base.eltype(::AbstractObservable{T}) where {T} = T
 
@@ -64,19 +108,12 @@ end
 Base.convert(::Type{T}, x::T) where {T<:Observable} = x  # resolves ambiguity with convert(::Type{T}, x::T) in base/essentials.jl
 Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
 
-function Base.getproperty(obs::Observable, field::Symbol)
-    if field === :val
-        return getfield(obs, field)
-    elseif field === :listeners
-        return getfield(obs, field)
-    elseif field === :inputs
-        return getfield(obs, field)
-    elseif field === :id
-        return obsid(obs)
-    else
-        error("Field $(field) not found")
-    end
+struct Consume
+    x::Bool
 end
+Consume() = Consume(true)
+Consume(x::Consume) = Consume(x.x) # for safety in selection_point etc
+Base.:(==)(a::Consume, b::Consume) = a.x == b.x
 
 """
     notify(observable::AbstractObservable)
@@ -85,10 +122,14 @@ Update all listeners of `observable`.
 """
 function Base.notify(@nospecialize(observable::AbstractObservable))
     val = observable[]
-    for f in listeners(observable)
-        Base.invokelatest(f, val)
+    for (prio, f) in listeners(observable)
+        result = Base.invokelatest(f, val)
+        if result isa Consume && result.x
+            # stop calling callbacks if event got consumed
+            return true
+        end
     end
-    return
+    return false
 end
 
 function Base.show(io::IO, x::Observable{T}) where T
@@ -101,7 +142,6 @@ function Base.show(io::IO, x::Observable{T}) where T
 end
 
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
-
 
 """
     mutable struct ObserverFunction <: Function
@@ -187,8 +227,18 @@ julia> obs[] = 5;
 current value is 5
 ```
 """
-function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false)
-    push!(listeners(observable), f)
+function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority = 0)
+    ls = listeners(observable)
+    if observable.use_priority
+        idx = findfirst(((prio, x),)-> prio < priority, ls)
+        if isnothing(idx)
+            push!(ls, priority => f)
+        else
+            insert!(ls, idx, priority => f)
+        end
+    else
+        push!(ls, 0 => f)
+    end
     for g in addhandler_callbacks
         g(f, observable)
     end
@@ -208,7 +258,7 @@ Returns `true` if `f` could be removed, otherwise `false`.
 """
 function off(observable::AbstractObservable, @nospecialize(f))
     callbacks = listeners(observable)
-    for (i, f2) in enumerate(callbacks)
+    for (i, (prio, f2)) in enumerate(callbacks)
         if f === f2
             deleteat!(callbacks, i)
             for g in removehandler_callbacks
@@ -245,9 +295,11 @@ end
 Updates the value of an `Observable` to `val` and call its listeners.
 """
 function Base.setindex!(observable::Observable, val)
+    if ignore_equal_values(observable)
+        isequal(observable.val, val) && return
+    end
     observable.val = val
-    notify(observable)
-    return val
+    return notify(observable)
 end
 
 function Base.setindex!(observable::AbstractObservable, val)
@@ -407,45 +459,8 @@ Observable{$Int} with 0 listeners. Value:
     map!(f, Observable(f(arg1[], map(to_value, args)...)), arg1, args...; update=false)
 end
 
-"""
-    obs = observe_changes(arg::AbstractObservable, eq=(==))
-
-Returns an `Observable` which updates with the value of `arg` whenever the new value
-differs from the current value of `obs` according to the equality operator `eq`.
-
-# Example:
-```
-julia> obs = Observable(0);
-
-julia> obs_change = observe_changes(obs);
-
-julia> on(obs) do o
-           println("obs[] == \$o")
-       end;
-
-julia> on(obs_change) do o
-           println("obs_change[] == \$o")
-       end;
-
-julia> obs[] = 0;
-obs[] == 0
-
-julia> obs[] = 1;
-obs_change[] == 1
-obs[] == 1
-
-julia> obs[] = 1;
-obs[] == 1
-```
-"""
 function observe_changes(obs::AbstractObservable{T}, eq=(==)) where T
-    out = Observable{T}(obs[])
-    on(obs) do val
-        if !eq(val, out[])
-            out[] = val
-        end
-    end
-    out
+
 end
 
 """
