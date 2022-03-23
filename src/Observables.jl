@@ -4,7 +4,6 @@ export Observable, on, off, onany, connect!, obsid, observe_changes, async_lates
 export Consume, PriorityObservable, ChangeObservable
 
 import Base.Iterators.filter
-Base.Experimental.@max_methods 1
 
 # @nospecialize "blocks" codegen but not necessarily inference. This forces inference
 # to drop specific information about an argument.
