@@ -1,7 +1,7 @@
 module Observables
 
-export Observable, on, off, onany, connect!, obsid, observe_changes, async_latest, throttle
-export Consume, PriorityObservable, ChangeObservable
+export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+export Consume, PriorityObservable, ChangeObservable, ObserverFunction, AbstractObservable
 
 import Base.Iterators.filter
 
