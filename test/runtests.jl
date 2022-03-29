@@ -17,16 +17,16 @@ end
     second = Observable(UInt64(0))
     third = Observable(UInt64(0))
 
-    on(po, priority=2) do x
+    on(po, priority=1) do x
         sleep(0)
         first[] = time_ns()
     end
-    on(po, priority=1) do x
+    on(po, priority=0) do x
         sleep(0)
         second[] = time_ns()
         return Consume(isodd(x))
     end
-    on(po, priority=0) do x
+    on(po, priority=-1) do x
         sleep(0)
         third[] = time_ns()
         return Consume(false)
