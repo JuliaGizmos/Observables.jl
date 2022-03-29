@@ -1,7 +1,7 @@
 module Observables
 
 export Observable, on, off, onany, connect!, obsid, async_latest, throttle
-export Consume, PriorityObservable, ChangeObservable, ObserverFunction, AbstractObservable
+export Consume, ChangeObservable, ObserverFunction, AbstractObservable
 
 import Base.Iterators.filter
 
@@ -32,26 +32,19 @@ mutable struct Observable{T} <: AbstractObservable{T}
 
     listeners::Vector{Pair{Int, Any}}
     inputs::Vector{Any}  # for map!ed Observables
-    use_priority::Bool
     ignore_equal_values::Bool
     val::T
 
-    function Observable{T}() where {T}
-        return new{T}(Pair{Int, Any}[], [], false, false)
+    function Observable{T}(; ignore_equal_values::Bool=false) where {T}
+        return new{T}(Pair{Int, Any}[], [], ignore_equal_values)
     end
-    function Observable{T}(val) where {T}
-        return new{T}(Pair{Int, Any}[], [], false, false, val)
+    function Observable{T}(val; ignore_equal_values::Bool=false) where {T}
+        return new{T}(Pair{Int, Any}[], [], ignore_equal_values, val)
     end
     # Construct an Observable{Any} without runtime dispatch
-    function Observable{Any}(@nospecialize(val))
-        return new{Any}(Pair{Int, Any}[], [], false, false, val)
+    function Observable{Any}(@nospecialize(val); ignore_equal_values::Bool=false)
+        return new{Any}(Pair{Int, Any}[], [], ignore_equal_values, val)
     end
-end
-
-function PriorityObservable(val::T) where T
-    obs = Observable{T}(val)
-    obs.use_priority = true
-    return obs
 end
 
 ignore_equal_values(obs::Observable) = obs.ignore_equal_values
@@ -87,9 +80,7 @@ julia> obs[] = 1;
 ```
 """
 function ChangeObservable(val::T) where T
-    obs = Observable{T}(val)
-    obs.ignore_equal_values = true
-    return obs
+    return Observable{T}(val; ignore_equal_values=true)
 end
 
 Base.eltype(::AbstractObservable{T}) where {T} = T
@@ -112,7 +103,6 @@ struct Consume
 end
 Consume() = Consume(true)
 Consume(x::Consume) = Consume(x.x) # for safety in selection_point etc
-Base.:(==)(a::Consume, b::Consume) = a.x == b.x
 
 """
     notify(observable::AbstractObservable)
@@ -226,17 +216,13 @@ julia> obs[] = 5;
 current value is 5
 ```
 """
-function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority = 0, update=false)
+function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority = 0, update = false)
     ls = listeners(observable)
-    if observable.use_priority
-        idx = findfirst(((prio, x),)-> prio < priority, ls)
-        if isnothing(idx)
-            push!(ls, priority => f)
-        else
-            insert!(ls, idx, priority => f)
-        end
+    idx = searchsortedfirst(ls, priority; by=first, rev=true)
+    if isnothing(idx)
+        push!(ls, priority => f)
     else
-        push!(ls, 0 => f)
+        insert!(ls, idx, priority => f)
     end
     for g in addhandler_callbacks
         g(f, observable)

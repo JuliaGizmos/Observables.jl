@@ -10,23 +10,23 @@ using Test
     @test y[] == 1
 end
 
-@testset "PriorityObservable" begin
-    po = PriorityObservable(0)
+@testset "Observable with Priority" begin
+    po = Observable(0)
 
     first = Observable(UInt64(0))
     second = Observable(UInt64(0))
     third = Observable(UInt64(0))
 
-    on(po, priority=1) do x
+    on(po, priority=2) do x
         sleep(0)
         first[] = time_ns()
     end
-    on(po, priority=0) do x
+    on(po, priority=1) do x
         sleep(0)
         second[] = time_ns()
         return Consume(isodd(x))
     end
-    on(po, priority=-1) do x
+    on(po, priority=0) do x
         sleep(0)
         third[] = time_ns()
         return Consume(false)
@@ -40,6 +40,9 @@ end
     x = setindex!(po, 2)
     @test x == false
     @test first[] < second[] < third[]
+
+    on(identity, po) # one more callback with priority=0
+    @test [1, 0, 0, -1] == Base.first.(po.listeners)
 end
 
 @testset "ChangeObservable" begin
