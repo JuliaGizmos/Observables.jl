@@ -45,6 +45,44 @@ end
     @test [1, 0, 0, -1] == Base.first.(po.listeners)
 end
 
+
+@testset "order with/without priority" begin
+    x = Observable(1)
+
+    on(1, x)
+    on(2, x)
+    on(3, x)
+    on(4, x)
+
+    @test last.(x.listeners) == [1, 2, 3, 4]
+
+
+    x = Observable(1)
+
+    on(1, x, priority=1)
+    on(2, x, priority=2)
+    on(3, x, priority=3)
+    on(4, x, priority=4)
+
+    @test last.(x.listeners) == [4, 3, 2, 1]
+    @test first.(x.listeners) == [4, 3, 2, 1]
+
+
+    x = Observable(1)
+
+    on(1, x, priority=1)
+    on(-1, x, priority=1)
+    on(2, x, priority=2)
+    on(-2, x, priority=2)
+    on(3, x, priority=3)
+    on(-3, x, priority=3)
+    on(4, x, priority=4)
+    on(-4, x, priority=4)
+
+    @test last.(x.listeners) == [4, -4, 3, -3, 2, -2, 1, -1]
+    @test first.(x.listeners) == [4, 4, 3, 3, 2, 2, 1, 1]
+end
+
 @testset "ChangeObservable" begin
     @testset "immutable" begin
         x = ChangeObservable(0)

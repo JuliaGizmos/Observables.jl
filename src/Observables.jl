@@ -218,12 +218,8 @@ current value is 5
 """
 function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority = 0, update = false)
     ls = listeners(observable)
-    idx = searchsortedfirst(ls, priority; by=first, rev=true)
-    if isnothing(idx)
-        push!(ls, priority => f)
-    else
-        insert!(ls, idx, priority => f)
-    end
+    idx = searchsortedlast(ls, priority; by=first, rev=true)
+    insert!(ls, idx + 1, priority => f)
     for g in addhandler_callbacks
         g(f, observable)
     end
