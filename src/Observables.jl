@@ -97,6 +97,8 @@ end
 
 Base.convert(::Type{T}, x::T) where {T<:Observable} = x  # resolves ambiguity with convert(::Type{T}, x::T) in base/essentials.jl
 Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
+Core.convert(::Type{Observable{Any}}, x::Observable{Any}) = x
+precompile(Core.convert, (Type{Observable{Any}}, Observable{Any}))
 
 struct Consume
     x::Bool
