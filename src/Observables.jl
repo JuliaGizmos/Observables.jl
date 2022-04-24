@@ -148,7 +148,7 @@ function Base.show(io::IO, obsf::ObserverFunction)
     else
         mths = methods(obsf.f)
         if length(mths) == 1
-            m = only(mths)
+            m = first(mths)
             print(io, "ObserverFunction defined at ", m.file, ":", m.line, " operating on ", obsf.observable)
         else
             showdflt(io, obsf.f, obsf.observable)
