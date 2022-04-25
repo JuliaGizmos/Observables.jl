@@ -83,9 +83,9 @@ end
     @test first.(x.listeners) == [4, 4, 3, 3, 2, 2, 1, 1]
 end
 
-@testset "ChangeObservable" begin
+@testset "ignore_equal_values=true" begin
     @testset "immutable" begin
-        x = ChangeObservable(0)
+        x = Observable(0; ignore_equal_values=true)
         y = Observable(0)
         on(x) do _
             y[] += 1
@@ -99,7 +99,7 @@ end
     end
 
     @testset "mutable" begin
-        x = ChangeObservable([0])
+        x = Observable([0]; ignore_equal_values=true)
         y = Observable(0)
         on(x) do _
             y[] += 1
@@ -113,7 +113,7 @@ end
     end
     @testset "map" begin
         x = Observable(0)
-        obs = map(identity, x; change_observable=true)
+        obs = map(identity, x; ignore_equal_values=true)
         y = Observable(0)
         on(obs) do x
             y[] += 1
