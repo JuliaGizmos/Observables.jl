@@ -5,7 +5,9 @@ export Consume, ObserverFunction, AbstractObservable
 
 import Base.Iterators.filter
 
-Base.Experimental.@optlevel 0
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
+    @eval Base.Experimental.@optlevel 0
+end
 
 # @nospecialize "blocks" codegen but not necessarily inference. This forces inference
 # to drop specific information about an argument.
@@ -15,14 +17,10 @@ else
     inferencebarrier(x) = Ref{Any}(x)[]
 end
 
-if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
-    @eval Base.Experimental.@max_methods 1
-end
-
 abstract type AbstractObservable{T} end
 
-function observe(::S) where {S<:AbstractObservable}
-    error("observe not defined for AbstractObservable $S")
+function observe(obs::AbstractObservable)
+    error("observe not defined for AbstractObservable $(typeof(obs))")
 end
 
 """
@@ -42,7 +40,7 @@ mutable struct Observable{T} <: AbstractObservable{T}
     function Observable{T}(; ignore_equal_values::Bool=false) where {T}
         return new{T}(Pair{Int, Any}[], [], ignore_equal_values)
     end
-    function Observable{T}(val; ignore_equal_values::Bool=false) where {T}
+    function Observable{T}(@nospecialize(val); ignore_equal_values::Bool=false) where {T}
         return new{T}(Pair{Int, Any}[], [], ignore_equal_values, val)
     end
     # Construct an Observable{Any} without runtime dispatch
@@ -51,41 +49,32 @@ mutable struct Observable{T} <: AbstractObservable{T}
     end
 end
 
-ignore_equal_values(obs::Observable) = obs.ignore_equal_values
-ignore_equal_values(obs::AbstractObservable) = false
+ignore_equal_values(@nospecialize(obs))::Bool = obs isa Observable ? obs.ignore_equal_values : false
 
 
-Observable(val::T; ignore_equal_values=false) where {T} = Observable{T}(val; ignore_equal_values)
+Observable(val::T; ignore_equal_values::Bool=false) where {T} = Observable{T}(val; ignore_equal_values)
 
 Base.eltype(::AbstractObservable{T}) where {T} = T
 
 observe(x::Observable) = x
 
-
-@noinline function _register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
+function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
     ls = observable.listeners::Vector{Pair{Int, Any}}
     idx = searchsortedlast(ls, priority; by=first, rev=true)
     insert!(ls, idx + 1, priority => f)
 end
 
-Base.@constprop :none function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
-    _register_callback(inferencebarrier(observable), priority, inferencebarrier(f))
-end
-
-@nospecialize
-
-Base.@constprop :none function Base.convert(::Type{P}, observable::AbstractObservable) where P <: Observable
+function Base.convert(::Type{P}, observable::AbstractObservable) where P <: Observable
     result = P(observable[])
     register_callback(observable, 0, x-> result[] = x)
     return result
 end
 
-Base.@constprop :none function Base.copy(observable::Observable{T}) where T
+function Base.copy(observable::Observable{T}) where T
     result = Observable{T}(observable[])
     register_callback(observable, 0, x-> result[] = x)
     return result
 end
-@specialize
 
 Base.convert(::Type{T}, x::T) where {T<:Observable} = x  # resolves ambiguity with convert(::Type{T}, x::T) in base/essentials.jl
 Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
@@ -103,7 +92,7 @@ Returns true if an event got consumed before notifying every listener.
 """
 function Base.notify(@nospecialize(observable::AbstractObservable))
     val = observable[]
-    for (prio, f) in listeners(observable)
+    for (_, f) in listeners(observable)::Vector{Pair{Int, Any}}
         result = Base.invokelatest(f, val)
         if result isa Consume && result.x
             # stop calling callbacks if event got consumed
@@ -248,7 +237,7 @@ end
 
 Updates the value of an `Observable` to `val` and call its listeners.
 """
-function Base.setindex!(observable::Observable, val)
+function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val))
     if ignore_equal_values(observable)
         isequal(observable.val, val) && return
     end
@@ -384,7 +373,7 @@ Forwards all updates from `o2` to `o1`.
 
 See also [`Observables.ObservablePair`](@ref).
 """
-connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o1, o2)
+connect!(o1::AbstractObservable, o2::AbstractObservable) = on(x-> o1[] = x, o2)
 
 """
     obs = map(f, arg1::AbstractObservable, args...)
