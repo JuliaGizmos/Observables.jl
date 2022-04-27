@@ -43,14 +43,9 @@ mutable struct Observable{T} <: AbstractObservable{T}
     function Observable{T}(@nospecialize(val); ignore_equal_values::Bool=false) where {T}
         return new{T}(Pair{Int, Any}[], [], ignore_equal_values, val)
     end
-    # Construct an Observable{Any} without runtime dispatch
-    function Observable{Any}(@nospecialize(val); ignore_equal_values::Bool=false)
-        return new{Any}(Pair{Int, Any}[], [], ignore_equal_values, val)
-    end
 end
 
 ignore_equal_values(@nospecialize(obs))::Bool = obs isa Observable ? obs.ignore_equal_values : false
-
 
 Observable(val::T; ignore_equal_values::Bool=false) where {T} = Observable{T}(val; ignore_equal_values)
 
@@ -62,6 +57,7 @@ function register_callback(@nospecialize(observable), priority::Int, @nospeciali
     ls = observable.listeners::Vector{Pair{Int, Any}}
     idx = searchsortedlast(ls, priority; by=first, rev=true)
     insert!(ls, idx + 1, priority => f)
+    return
 end
 
 function Base.convert(::Type{P}, observable::AbstractObservable) where P <: Observable
@@ -78,7 +74,9 @@ end
 
 Base.convert(::Type{T}, x::T) where {T<:Observable} = x  # resolves ambiguity with convert(::Type{T}, x::T) in base/essentials.jl
 Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
-Core.convert(::Type{Observable{Any}}, x::Observable{Any}) = x
+Base.convert(::Type{Observable{Any}}, x::AbstractObservable{Any}) = x
+Base.convert(::Type{Observables.Observable{Any}}, x::Observables.Observable{Any}) = x
+
 precompile(Core.convert, (Type{Observable{Any}}, Observable{Any}))
 
 struct Consume
@@ -133,7 +131,7 @@ It can still be useful because it is easier to call `off(obsfunc)` instead of `o
 to release the connection later.
 """
 mutable struct ObserverFunction <: Function
-    f
+    f::Any
     observable::AbstractObservable
     weak::Bool
 
@@ -144,11 +142,9 @@ mutable struct ObserverFunction <: Function
         # storing it in its listeners once the ObserverFunction is garbage collected.
         # This should free all resources associated with f unless there
         # is another reference to it somewhere else.
-        if weak
-            finalizer(off, obsfunc)
-        end
+        weak && finalizer(off, obsfunc)
 
-        obsfunc
+        return obsfunc
     end
 end
 
@@ -172,7 +168,7 @@ observable connections are removed automatically.
 
 ```jldoctest; setup=:(using Observables)
 julia> obs = Observable(0)
-Observable{$Int} with 0 listeners. Value:
+Observable{Int} with 0 listeners. Value:
 0
 
 julia> on(obs) do val
@@ -187,9 +183,7 @@ current value is 5
 function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority::Int = 0, update::Bool = false)
     register_callback(observable, priority, f)
 
-    if update
-        f(observable[])
-    end
+    update && f(observable[])
     # Return a ObserverFunction so that the caller is responsible
     # to keep a reference to it around as long as they want the connection to
     # persist. If the ObserverFunction is garbage collected, f will be released from
@@ -215,7 +209,6 @@ function off(observable::AbstractObservable, @nospecialize(f))
     return false
 end
 
-
 function off(observable::AbstractObservable, obsfunc::ObserverFunction)
     f = obsfunc.f
     # remove the function inside obsfunc as usual
@@ -240,7 +233,7 @@ end
 Updates the value of an `Observable` to `val` and call its listeners.
 """
 function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val))
-    if ignore_equal_values(observable)
+    if observable.ignore_equal_values
         isequal(observable.val, val) && return
     end
     observable.val = val
@@ -289,23 +282,18 @@ All other objects in `args` are passed as-is.
 
 See also: [`on`](@ref).
 """
-function onany(@nospecialize(f), args...; weak::Bool = false)
-    ff = (_) -> f(to_value.(args)...)
-    _onany(inferencebarrier(ff), args, weak)
-end
-
-@noinline function _onany(@nospecialize(callback), args, weak::Bool)
-    # store all returned ObserverFunctions
+function onany(f, args...; weak::Bool = false, priority::Int=0)
+    function callback(@nospecialize(x))
+        f(map(to_value, args)...)
+    end
     obsfuncs = ObserverFunction[]
     for observable in args
         if observable isa AbstractObservable
-            obsfunc = on(callback, observable, weak = weak)
+            obsfunc = on(callback, observable; weak=weak, priority=priority)
             push!(obsfuncs, obsfunc)
         end
     end
-    # same principle as with `on`, this collection needs to be
-    # stored by the caller or the connections made will be cut
-    obsfuncs
+    return obsfuncs
 end
 
 """
