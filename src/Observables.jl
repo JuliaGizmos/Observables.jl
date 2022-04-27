@@ -1,9 +1,13 @@
 module Observables
 
 export Observable, on, off, onany, connect!, obsid, async_latest, throttle
-export Consume, ChangeObservable, ObserverFunction, AbstractObservable
+export Consume, ObserverFunction, AbstractObservable
 
 import Base.Iterators.filter
+
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
+    @eval Base.Experimental.@optlevel 0
+end
 
 # @nospecialize "blocks" codegen but not necessarily inference. This forces inference
 # to drop specific information about an argument.
@@ -13,20 +17,18 @@ else
     inferencebarrier(x) = Ref{Any}(x)[]
 end
 
-const addhandler_callbacks = []
-const removehandler_callbacks = []
-
 abstract type AbstractObservable{T} end
 
-function observe(::S) where {S<:AbstractObservable}
-    error("observe not defined for AbstractObservable $S")
+function observe(obs::AbstractObservable)
+    error("observe not defined for AbstractObservable $(typeof(obs))")
 end
 
 """
-    obs = Observable(val)
-    obs = Observable{T}(val)
+    obs = Observable(val; ignore_equal_values=false)
+    obs = Observable{T}(val; ignore_equal_values=false)
 
 Like a `Ref`, but updates can be watched by adding a handler using [`on`](@ref) or [`map`](@ref).
+Set `ignore_equal_values=true` to not trigger an event for `observable[] = new_value` if `isequel(observable[], new_value)`.
 """
 mutable struct Observable{T} <: AbstractObservable{T}
 
@@ -38,7 +40,7 @@ mutable struct Observable{T} <: AbstractObservable{T}
     function Observable{T}(; ignore_equal_values::Bool=false) where {T}
         return new{T}(Pair{Int, Any}[], [], ignore_equal_values)
     end
-    function Observable{T}(val; ignore_equal_values::Bool=false) where {T}
+    function Observable{T}(@nospecialize(val); ignore_equal_values::Bool=false) where {T}
         return new{T}(Pair{Int, Any}[], [], ignore_equal_values, val)
     end
     # Construct an Observable{Any} without runtime dispatch
@@ -47,51 +49,30 @@ mutable struct Observable{T} <: AbstractObservable{T}
     end
 end
 
-ignore_equal_values(obs::Observable) = obs.ignore_equal_values
-ignore_equal_values(obs::AbstractObservable) = false
-
-function Base.copy(observable::Observable{T}) where T
-    result = Observable{T}(observable[])
-    on(observable) do value
-        result[] = value
-    end
-    return result
-end
-
-Observable(val::T) where {T} = Observable{T}(val)
+ignore_equal_values(@nospecialize(obs))::Bool = obs isa Observable ? obs.ignore_equal_values : false
 
 
-"""
-    obs = ChangeObservable(value)
-
-Returns an `Observable` which updates with the value of `arg` whenever the new value
-differs from the current value of `obs` according to the equality (==).
-
-# Example:
-```
-julia> obs = ChangeObservable(0);
-julia> on(obs) do o
-           println("obs_change[] == \$o")
-       end;
-julia> obs[] = 0;
-julia> obs[] = 1;
-obs_change[] == 1
-julia> obs[] = 1;
-```
-"""
-function ChangeObservable(val::T) where T
-    return Observable{T}(val; ignore_equal_values=true)
-end
+Observable(val::T; ignore_equal_values::Bool=false) where {T} = Observable{T}(val; ignore_equal_values)
 
 Base.eltype(::AbstractObservable{T}) where {T} = T
 
 observe(x::Observable) = x
 
-function Base.convert(::Type{Observable{T}}, x::AbstractObservable) where {T}
-    result = Observable{T}(convert(T, x[]))
-    on(x) do value
-        result[] = convert(T, value)
-    end
+function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
+    ls = observable.listeners::Vector{Pair{Int, Any}}
+    idx = searchsortedlast(ls, priority; by=first, rev=true)
+    insert!(ls, idx + 1, priority => f)
+end
+
+function Base.convert(::Type{P}, observable::AbstractObservable) where P <: Observable
+    result = P(observable[])
+    register_callback(observable, 0, x-> result[] = x)
+    return result
+end
+
+function Base.copy(observable::Observable{T}) where T
+    result = Observable{T}(observable[])
+    register_callback(observable, 0, x-> result[] = x)
     return result
 end
 
@@ -104,16 +85,16 @@ struct Consume
     x::Bool
 end
 Consume() = Consume(true)
-Consume(x::Consume) = Consume(x.x) # for safety in selection_point etc
 
 """
     notify(observable::AbstractObservable)
 
 Update all listeners of `observable`.
+Returns true if an event got consumed before notifying every listener.
 """
 function Base.notify(@nospecialize(observable::AbstractObservable))
     val = observable[]
-    for (prio, f) in listeners(observable)
+    for (_, f) in listeners(observable)::Vector{Pair{Int, Any}}
         result = Base.invokelatest(f, val)
         if result isa Consume && result.x
             # stop calling callbacks if event got consumed
@@ -171,21 +152,6 @@ mutable struct ObserverFunction <: Function
     end
 end
 
-Base.precompile(obsf::ObserverFunction) = precompile(obsf.f, (eltype(obsf.observable),))
-function Base.precompile(observable::Observable)
-    tf = true
-    T = eltype(observable)
-    for f in observable.listeners
-        precompile(f, (T,))
-    end
-    if isdefined(observable, :inputs)
-        for obsf in observable.inputs
-            tf &= precompile(obsf)
-        end
-    end
-    return tf
-end
-
 """
     on(f, observable::AbstractObservable; weak = false)
 
@@ -218,13 +184,9 @@ julia> obs[] = 5;
 current value is 5
 ```
 """
-function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority = 0, update = false)
-    ls = listeners(observable)
-    idx = searchsortedlast(ls, priority; by=first, rev=true)
-    insert!(ls, idx + 1, priority => f)
-    for g in addhandler_callbacks
-        g(f, observable)
-    end
+function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority::Int = 0, update::Bool = false)
+    register_callback(observable, priority, f)
+
     if update
         f(observable[])
     end
@@ -247,9 +209,6 @@ function off(observable::AbstractObservable, @nospecialize(f))
     for (i, (prio, f2)) in enumerate(callbacks)
         if f === f2
             deleteat!(callbacks, i)
-            for g in removehandler_callbacks
-                g(observable, f)
-            end
             return true
         end
     end
@@ -280,7 +239,7 @@ end
 
 Updates the value of an `Observable` to `val` and call its listeners.
 """
-function Base.setindex!(observable::Observable, val)
+function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val))
     if ignore_equal_values(observable)
         isequal(observable.val, val) && return
     end
@@ -416,7 +375,7 @@ Forwards all updates from `o2` to `o1`.
 
 See also [`Observables.ObservablePair`](@ref).
 """
-connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o1, o2)
+connect!(o1::AbstractObservable, o2::AbstractObservable) = on(x-> o1[] = x, o2)
 
 """
     obs = map(f, arg1::AbstractObservable, args...)
@@ -440,10 +399,9 @@ Observable{$Int} with 0 listeners. Value:
 3
 ```
 """
-@inline function Base.map(f::F, arg1::AbstractObservable, args...; change_observable=false) where F
+@inline function Base.map(f::F, arg1::AbstractObservable, args...; ignore_equal_values=false) where F
     # note: the @inline prevents de-specialization due to the splatting
-    obs = Observable(f(arg1[], map(to_value, args)...))
-    obs.ignore_equal_values = change_observable
+    obs = Observable(f(arg1[], map(to_value, args)...); ignore_equal_values=ignore_equal_values)
     map!(f, obs, arg1, args...; update=false)
     return obs
 end
@@ -530,6 +488,19 @@ methodlist(mi::Core.MethodInstance) = methodlist(Base.unwrap_unionall(mi.specTyp
 methodlist(obsf::ObserverFunction) = methodlist(obsf.f)
 methodlist(@nospecialize(f::Function)) = methodlist(typeof(f))
 
-@deprecate notify! notify
+Base.precompile(obsf::ObserverFunction) = precompile(obsf.f, (eltype(obsf.observable),))
+function Base.precompile(observable::Observable)
+    tf = true
+    T = eltype(observable)
+    for f in observable.listeners
+        precompile(f, (T,))
+    end
+    if isdefined(observable, :inputs)
+        for obsf in observable.inputs
+            tf &= precompile(obsf)
+        end
+    end
+    return tf
+end
 
 end # module
