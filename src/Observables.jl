@@ -48,6 +48,14 @@ mutable struct Observable{T} <: AbstractObservable{T}
     end
 end
 
+function Base.getproperty(obs::Observable, field::Symbol)
+    if field === :id
+        return obsid(obs)
+    else
+        getfield(obs, field)
+    end
+end
+
 ignore_equal_values(@nospecialize(obs))::Bool = obs isa Observable ? obs.ignore_equal_values : false
 
 Observable(val::T; ignore_equal_values::Bool=false) where {T} = Observable{T}(val; ignore_equal_values)
