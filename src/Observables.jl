@@ -22,10 +22,6 @@ abstract type AbstractObservable{T} end
 const addhandler_callbacks = []
 const removehandler_callbacks = []
 
-function observe(obs::AbstractObservable)
-    error("observe not defined for AbstractObservable $(typeof(obs))")
-end
-
 """
     obs = Observable(val; ignore_equal_values=false)
     obs = Observable{T}(val; ignore_equal_values=false)
@@ -62,7 +58,14 @@ Observable(val::T; ignore_equal_values::Bool=false) where {T} = Observable{T}(va
 
 Base.eltype(::AbstractObservable{T}) where {T} = T
 
+function observe(obs::AbstractObservable)
+    error("observe not defined for AbstractObservable $(typeof(obs))")
+end
 observe(x::Observable) = x
+Base.getindex(obs::AbstractObservable) = getindex(observe(obs))
+Base.setindex!(obs::AbstractObservable, val) = setindex!(observe(obs), val)
+listeners(obs::AbstractObservable) = listeners(observe(obs))
+obsid(obs::AbstractObservable) = obsid(observe(obs))
 
 function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
     ls = observable.listeners::Vector{Pair{Int, Any}}
