@@ -19,6 +19,9 @@ end
 
 abstract type AbstractObservable{T} end
 
+const addhandler_callbacks = []
+const removehandler_callbacks = []
+
 function observe(obs::AbstractObservable)
     error("observe not defined for AbstractObservable $(typeof(obs))")
 end
@@ -77,7 +80,7 @@ Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
 Base.convert(::Type{Observable{Any}}, x::AbstractObservable{Any}) = x
 Base.convert(::Type{Observables.Observable{Any}}, x::Observables.Observable{Any}) = x
 
-precompile(Core.convert, (Type{Observable{Any}}, Observable{Any}))
+
 
 struct Consume
     x::Bool
@@ -135,21 +138,19 @@ mutable struct ObserverFunction <: Function
     observable::AbstractObservable
     weak::Bool
 
-    function ObserverFunction(@nospecialize(f), observable::AbstractObservable, weak)
+    function ObserverFunction(@nospecialize(f), @nospecialize(observable::AbstractObservable), weak::Bool)
         obsfunc = new(f, observable, weak)
-
         # If the weak flag is set, deregister the function f from the observable
         # storing it in its listeners once the ObserverFunction is garbage collected.
         # This should free all resources associated with f unless there
         # is another reference to it somewhere else.
         weak && finalizer(off, obsfunc)
-
         return obsfunc
     end
 end
 
 """
-    on(f, observable::AbstractObservable; weak = false)
+    on(f, observable::AbstractObservable; weak = false)::ObserverFunction
 
 Adds function `f` as listener to `observable`. Whenever `observable`'s value
 is set via `observable[] = val`, `f` is called with `val`.
@@ -180,8 +181,12 @@ julia> obs[] = 5;
 current value is 5
 ```
 """
-function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority::Int = 0, update::Bool = false)
+function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority::Int = 0, update::Bool = false)::ObserverFunction
     register_callback(observable, priority, f)
+    #
+    for g in addhandler_callbacks
+        g(f, observable)
+    end
 
     update && f(observable[])
     # Return a ObserverFunction so that the caller is responsible
@@ -198,21 +203,23 @@ Removes `f` from listeners of `observable`.
 
 Returns `true` if `f` could be removed, otherwise `false`.
 """
-function off(observable::AbstractObservable, @nospecialize(f))
+function off(@nospecialize(observable::AbstractObservable), @nospecialize(f))
     callbacks = listeners(observable)
     for (i, (prio, f2)) in enumerate(callbacks)
         if f === f2
             deleteat!(callbacks, i)
+            for g in removehandler_callbacks
+                g(observable, f)
+            end
             return true
         end
     end
     return false
 end
 
-function off(observable::AbstractObservable, obsfunc::ObserverFunction)
-    f = obsfunc.f
+function off(@nospecialize(observable::AbstractObservable), obsfunc::ObserverFunction)
     # remove the function inside obsfunc as usual
-    off(observable, f)
+    off(observable, obsfunc.f)
 end
 
 """
@@ -240,18 +247,12 @@ function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val
     return notify(observable)
 end
 
-function Base.setindex!(observable::AbstractObservable, val)
-    Base.setindex!(observe(observable), val)
-end
-
 """
     observable[]
 
 Returns the current value of `observable`.
 """
 Base.getindex(observable::Observable) = observable.val
-
-Base.getindex(observable::AbstractObservable) = getindex(observe(observable))
 
 ### Utilities
 
@@ -267,10 +268,8 @@ to_value(x) = isa(x, AbstractObservable) ? x[] : x  # noninferrable dispatch is 
 Gets a unique id for an observable.
 """
 obsid(observable::Observable) = string(objectid(observable))
-obsid(observable::AbstractObservable) = obsid(observe(observable))
 
 listeners(observable::Observable) = observable.listeners
-listeners(observable::AbstractObservable) = listeners(observe(observable))
 
 """
     onany(f, args...)
@@ -347,7 +346,7 @@ can handle any number type for which `sqrt` is defined.
     return observable
 end
 
-function appendinputs!(observable, obsfuncs)  # latency: separating this from map! allows dropping the specialization on `f`
+function appendinputs!(@nospecialize(observable), obsfuncs::Vector{ObserverFunction})  # latency: separating this from map! allows dropping the specialization on `f`
     if !isdefined(observable, :inputs)
         observable.inputs = obsfuncs
     else
@@ -366,12 +365,12 @@ See also [`Observables.ObservablePair`](@ref).
 connect!(o1::AbstractObservable, o2::AbstractObservable) = on(x-> o1[] = x, o2)
 
 """
-    obs = map(f, arg1::AbstractObservable, args...)
+    obs = map(f, arg1::AbstractObservable, args...; ignore_equal_values=false)
 
-Creates a new observable ref `obs` which contains the result of `f` applied to values
+Creates a new observable `obs` which contains the result of `f` applied to values
 extracted from `arg1` and `args` (i.e., `f(arg1[], ...)`.
-`arg1` must be an observable ref for dispatch reasons. `args` may contain any number of `Observable` objects.
-`f` will be passed the values contained in the refs as the respective argument.
+`arg1` must be an observable for dispatch reasons. `args` may contain any number of `Observable` objects.
+`f` will be passed the values contained in the observables as the respective argument.
 All other objects in `args` are passed as-is.
 
 If you don't need the value of `obs`, and just want to run `f` whenever the
@@ -490,5 +489,8 @@ function Base.precompile(observable::Observable)
     end
     return tf
 end
+
+precompile(Core.convert, (Type{Observable{Any}}, Observable{Any}))
+precompile(Base.copy, (Type{Observable{Any}},))
 
 end # module

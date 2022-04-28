@@ -42,55 +42,6 @@ end
 obs_func = nothing
 # now garbage collection can at any time clear the connection
 ```
-
-### Async operations
-
-#### Delay an update
-
-```@repl manual
-x = Observable(1)
-y = map(x) do val
-    @async begin
-        sleep(1.5)
-        return val + 1
-    end
-end
-tstart = time()
-onany(x, y) do xval, yval
-    println("At ", time()-tstart, ", we have x = ", xval, " and y = ", yval)
-end
-sleep(3)
-x[] = 5
-sleep(3)
-```
-
-#### Multiply updates
-
-If you want to fire several events on an update (e.g., for interpolating animations), you can use a channel:
-
-```@repl manual
-x = Observable(1)
-y = map(x) do val
-    Channel() do channel
-        for i in 1:10
-            put!(channel, i + val)
-        end
-    end
-end; on(y) do val
-    println("updated to ", val)
-end; sleep(2)
-```
-
-Similarly, you can construct the Observable from a `Channel`:
-
-```julia
-Observable(Channel() do channel
-    for i in 1:10
-        put!(channel, i + 1)
-    end
-end)
-```
-
 ### How is it different from Reactive.jl?
 
 The main difference is `Signal`s are manipulated mostly by converting one signal to another. For example, with signals, you can construct a changing UI by creating a `Signal` of UI objects and rendering them as the signal changes. On the other hand, you can use an Observable both as an input and an output. You can arbitrarily attach outputs to inputs allowing structuring code in a [signals-and-slots](http://doc.qt.io/qt-4.8/signalsandslots.html) kind of pattern.
