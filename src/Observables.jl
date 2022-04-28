@@ -161,7 +161,7 @@ mutable struct ObserverFunction <: Function
 end
 
 """
-    on(f, observable::AbstractObservable; weak = false)::ObserverFunction
+    on(f, observable::AbstractObservable; weak = false, priority=0, update=false)::ObserverFunction
 
 Adds function `f` as listener to `observable`. Whenever `observable`'s value
 is set via `observable[] = val`, `f` is called with `val`.
@@ -191,6 +191,31 @@ julia> on(obs) do val
 julia> obs[] = 5;
 current value is 5
 ```
+
+One can also give the callback a priority, to enable always calling a specific callback before/after others, independent of the order of registration.
+So one can do:
+
+```julia
+julia> obs = Observable(0)
+julia> on(obs; priority=-1) do x
+           println("Hi from first added")
+       end
+julia> on(obs) do x
+           println("Hi from second added")
+       end
+julia> obs[] = 2
+Hi from second added
+Hi from first added
+```
+
+If you set `update=true`, on will call f(obs[]) immediately:
+```julia
+julia> on(Observable(1); update=true) do x
+    println("hi")
+end
+hi
+```
+
 """
 function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority::Int = 0, update::Bool = false)::ObserverFunction
     register_callback(observable, priority, f)
