@@ -139,6 +139,25 @@ mutable struct ObserverFunction <: Function
     end
 end
 
+function Base.show(io::IO, obsf::ObserverFunction)
+    showdflt(io, @nospecialize(f), obs) = print(io, "ObserverFunction `", f, "` operating on ", obs)
+
+    nm = string(nameof(obsf.f))
+    if !occursin('#', nm)
+        showdflt(io, obsf.f, obsf.observable)
+    else
+        mths = methods(obsf.f)
+        if length(mths) == 1
+            m = first(mths)
+            print(io, "ObserverFunction defined at ", m.file, ":", m.line, " operating on ", obsf.observable)
+        else
+            showdflt(io, obsf.f, obsf.observable)
+        end
+    end
+end
+Base.show(io::IO, ::MIME"text/plain", obsf::ObserverFunction) = show(io, obsf)
+Base.print(io::IO, obsf::ObserverFunction) = show(io, obsf)   # Base.print is specialized for ::Function
+
 Base.precompile(obsf::ObserverFunction) = precompile(obsf.f, (eltype(obsf.observable),))
 function Base.precompile(observable::Observable)
     tf = true
