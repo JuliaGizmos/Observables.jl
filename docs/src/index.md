@@ -43,52 +43,51 @@ obs_func = nothing
 # now garbage collection can at any time clear the connection
 ```
 
-### Async operations
+### Priority
 
-#### Delay an update
-
-```@repl manual
-x = Observable(1)
-y = map(x) do val
-    @async begin
-        sleep(1.5)
-        return val + 1
-    end
-end
-tstart = time()
-onany(x, y) do xval, yval
-    println("At ", time()-tstart, ", we have x = ", xval, " and y = ", yval)
-end
-sleep(3)
-x[] = 5
-sleep(3)
-```
-
-#### Multiply updates
-
-If you want to fire several events on an update (e.g., for interpolating animations), you can use a channel:
-
-```@repl manual
-x = Observable(1)
-y = map(x) do val
-    Channel() do channel
-        for i in 1:10
-            put!(channel, i + val)
-        end
-    end
-end; on(y) do val
-    println("updated to ", val)
-end; sleep(2)
-```
-
-Similarly, you can construct the Observable from a `Channel`:
+One can also give the callback a priority, to enable always calling a specific callback before/after others, independent of the order of registration.
+So one can do:
 
 ```julia
-Observable(Channel() do channel
-    for i in 1:10
-        put!(channel, i + 1)
+obs = Observable(0)
+on(obs; priority=-1) do x
+    println("Hi from first added")
+end
+on(obs) do x
+    println("Hi from second added")
+end
+obs[] = 2
+Hi from second added
+Hi from first added
+```
+Without the priority, the printing order would be the other way around.
+One can also return `Consume(true/false)`, to consume an event and stop any later callback from getting called.
+
+```julia
+obs = Observable(0)
+on(obs) do x
+    if x == 1
+        println("stop calling callbacks after me!")
+        return Consume(true)
+    else
+        println("Do not consume!")
     end
-end)
+end
+on(obs) do x
+    println("I get called")
+end
+obs[] = 2
+Do not consume!
+I get called
+obs[] = 1
+stop calling callbacks after me!
+```
+
+The first one could of course also be written as:
+```julia
+on(obs) do x
+    return Consume(x == 1)
+end
 ```
 
 ### How is it different from Reactive.jl?

@@ -1,9 +1,13 @@
 module Observables
 
-export Observable, on, off, onany, connect!, obsid, observe_changes, async_latest, throttle
+export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+export Consume, ObserverFunction, AbstractObservable
 
 import Base.Iterators.filter
-Base.Experimental.@max_methods 1
+
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
+    @eval Base.Experimental.@optlevel 0
+end
 
 # @nospecialize "blocks" codegen but not necessarily inference. This forces inference
 # to drop specific information about an argument.
@@ -13,82 +17,103 @@ else
     inferencebarrier(x) = Ref{Any}(x)[]
 end
 
+abstract type AbstractObservable{T} end
+
 const addhandler_callbacks = []
 const removehandler_callbacks = []
 
-abstract type AbstractObservable{T} end
-
-function observe(::S) where {S<:AbstractObservable}
-    error("observe not defined for AbstractObservable $S")
-end
-
 """
-    obs = Observable(val)
-    obs = Observable{T}(val)
+    obs = Observable(val; ignore_equal_values=false)
+    obs = Observable{T}(val; ignore_equal_values=false)
 
 Like a `Ref`, but updates can be watched by adding a handler using [`on`](@ref) or [`map`](@ref).
+Set `ignore_equal_values=true` to not trigger an event for `observable[] = new_value` if `isequel(observable[], new_value)`.
 """
 mutable struct Observable{T} <: AbstractObservable{T}
-    listeners::Vector{Any}
-    val::T
-    inputs::Vector{Any}  # for map!ed Observables
 
-    Observable{T}() where {T} = new{T}([])
-    Observable{T}(val) where {T} = new{T}([], val)
-    # Construct an Observable{Any} without runtime dispatch
-    Observable{Any}(@nospecialize(val)) = new{Any}([], val)
+    listeners::Vector{Pair{Int, Any}}
+    inputs::Vector{Any}  # for map!ed Observables
+    ignore_equal_values::Bool
+    val::T
+
+    function Observable{T}(; ignore_equal_values::Bool=false) where {T}
+        return new{T}(Pair{Int, Any}[], [], ignore_equal_values)
+    end
+    function Observable{T}(@nospecialize(val); ignore_equal_values::Bool=false) where {T}
+        return new{T}(Pair{Int, Any}[], [], ignore_equal_values, val)
+    end
+end
+
+function Base.getproperty(obs::Observable, field::Symbol)
+    if field === :id
+        return obsid(obs)
+    else
+        getfield(obs, field)
+    end
+end
+
+ignore_equal_values(@nospecialize(obs))::Bool = obs isa Observable ? obs.ignore_equal_values : false
+
+Observable(val::T; ignore_equal_values::Bool=false) where {T} = Observable{T}(val; ignore_equal_values)
+
+Base.eltype(::AbstractObservable{T}) where {T} = T
+
+function observe(obs::AbstractObservable)
+    error("observe not defined for AbstractObservable $(typeof(obs))")
+end
+observe(x::Observable) = x
+Base.getindex(obs::AbstractObservable) = getindex(observe(obs))
+Base.setindex!(obs::AbstractObservable, val) = setindex!(observe(obs), val)
+listeners(obs::AbstractObservable) = listeners(observe(obs))
+obsid(obs::AbstractObservable) = obsid(observe(obs))
+
+function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
+    ls = observable.listeners::Vector{Pair{Int, Any}}
+    idx = searchsortedlast(ls, priority; by=first, rev=true)
+    insert!(ls, idx + 1, priority => f)
+    return
+end
+
+function Base.convert(::Type{P}, observable::AbstractObservable) where P <: Observable
+    result = P(observable[])
+    register_callback(observable, 0, x-> result[] = x)
+    return result
 end
 
 function Base.copy(observable::Observable{T}) where T
     result = Observable{T}(observable[])
-    on(observable) do value
-        result[] = value
-    end
-    return result
-end
-
-Observable(val::T) where {T} = Observable{T}(val)
-
-Base.eltype(::AbstractObservable{T}) where {T} = T
-
-observe(x::Observable) = x
-
-function Base.convert(::Type{Observable{T}}, x::AbstractObservable) where {T}
-    result = Observable{T}(convert(T, x[]))
-    on(x) do value
-        result[] = convert(T, value)
-    end
+    register_callback(observable, 0, x-> result[] = x)
     return result
 end
 
 Base.convert(::Type{T}, x::T) where {T<:Observable} = x  # resolves ambiguity with convert(::Type{T}, x::T) in base/essentials.jl
 Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
+Base.convert(::Type{Observable{Any}}, x::AbstractObservable{Any}) = x
+Base.convert(::Type{Observables.Observable{Any}}, x::Observables.Observable{Any}) = x
 
-function Base.getproperty(obs::Observable, field::Symbol)
-    if field === :val
-        return getfield(obs, field)
-    elseif field === :listeners
-        return getfield(obs, field)
-    elseif field === :inputs
-        return getfield(obs, field)
-    elseif field === :id
-        return obsid(obs)
-    else
-        error("Field $(field) not found")
-    end
+
+
+struct Consume
+    x::Bool
 end
+Consume() = Consume(true)
 
 """
     notify(observable::AbstractObservable)
 
 Update all listeners of `observable`.
+Returns true if an event got consumed before notifying every listener.
 """
 function Base.notify(@nospecialize(observable::AbstractObservable))
     val = observable[]
-    for f in listeners(observable)
-        Base.invokelatest(f, val)
+    for (_, f) in listeners(observable)::Vector{Pair{Int, Any}}
+        result = Base.invokelatest(f, val)
+        if result isa Consume && result.x
+            # stop calling callbacks if event got consumed
+            return true
+        end
     end
-    return
+    return false
 end
 
 function Base.show(io::IO, x::Observable{T}) where T
@@ -101,7 +126,6 @@ function Base.show(io::IO, x::Observable{T}) where T
 end
 
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
-
 
 """
     mutable struct ObserverFunction <: Function
@@ -121,42 +145,23 @@ It can still be useful because it is easier to call `off(obsfunc)` instead of `o
 to release the connection later.
 """
 mutable struct ObserverFunction <: Function
-    f
+    f::Any
     observable::AbstractObservable
     weak::Bool
 
-    function ObserverFunction(@nospecialize(f), observable::AbstractObservable, weak)
+    function ObserverFunction(@nospecialize(f), @nospecialize(observable::AbstractObservable), weak::Bool)
         obsfunc = new(f, observable, weak)
-
         # If the weak flag is set, deregister the function f from the observable
         # storing it in its listeners once the ObserverFunction is garbage collected.
         # This should free all resources associated with f unless there
         # is another reference to it somewhere else.
-        if weak
-            finalizer(off, obsfunc)
-        end
-
-        obsfunc
+        weak && finalizer(off, obsfunc)
+        return obsfunc
     end
-end
-
-Base.precompile(obsf::ObserverFunction) = precompile(obsf.f, (eltype(obsf.observable),))
-function Base.precompile(observable::Observable)
-    tf = true
-    T = eltype(observable)
-    for f in observable.listeners
-        precompile(f, (T,))
-    end
-    if isdefined(observable, :inputs)
-        for obsf in observable.inputs
-            tf &= precompile(obsf)
-        end
-    end
-    return tf
 end
 
 """
-    on(f, observable::AbstractObservable; weak = false)
+    on(f, observable::AbstractObservable; weak = false, priority=0, update=false)::ObserverFunction
 
 Adds function `f` as listener to `observable`. Whenever `observable`'s value
 is set via `observable[] = val`, `f` is called with `val`.
@@ -175,7 +180,7 @@ observable connections are removed automatically.
 
 ```jldoctest; setup=:(using Observables)
 julia> obs = Observable(0)
-Observable{$Int} with 0 listeners. Value:
+Observable{Int} with 0 listeners. Value:
 0
 
 julia> on(obs) do val
@@ -186,12 +191,41 @@ julia> on(obs) do val
 julia> obs[] = 5;
 current value is 5
 ```
+
+One can also give the callback a priority, to enable always calling a specific callback before/after others, independent of the order of registration.
+The callback with the highest priority gets called first, the default is zero, and the whole range of Int can be used.
+So one can do:
+
+```julia
+julia> obs = Observable(0)
+julia> on(obs; priority=-1) do x
+           println("Hi from first added")
+       end
+julia> on(obs) do x
+           println("Hi from second added")
+       end
+julia> obs[] = 2
+Hi from second added
+Hi from first added
+```
+
+If you set `update=true`, on will call f(obs[]) immediately:
+```julia
+julia> on(Observable(1); update=true) do x
+    println("hi")
+end
+hi
+```
+
 """
-function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false)
-    push!(listeners(observable), f)
+function on(@nospecialize(f), @nospecialize(observable::AbstractObservable); weak::Bool = false, priority::Int = 0, update::Bool = false)::ObserverFunction
+    register_callback(observable, priority, f)
+    #
     for g in addhandler_callbacks
         g(f, observable)
     end
+
+    update && f(observable[])
     # Return a ObserverFunction so that the caller is responsible
     # to keep a reference to it around as long as they want the connection to
     # persist. If the ObserverFunction is garbage collected, f will be released from
@@ -206,9 +240,9 @@ Removes `f` from listeners of `observable`.
 
 Returns `true` if `f` could be removed, otherwise `false`.
 """
-function off(observable::AbstractObservable, @nospecialize(f))
+function off(@nospecialize(observable::AbstractObservable), @nospecialize(f))
     callbacks = listeners(observable)
-    for (i, f2) in enumerate(callbacks)
+    for (i, (prio, f2)) in enumerate(callbacks)
         if f === f2
             deleteat!(callbacks, i)
             for g in removehandler_callbacks
@@ -220,11 +254,9 @@ function off(observable::AbstractObservable, @nospecialize(f))
     return false
 end
 
-
-function off(observable::AbstractObservable, obsfunc::ObserverFunction)
-    f = obsfunc.f
+function off(@nospecialize(observable::AbstractObservable), obsfunc::ObserverFunction)
     # remove the function inside obsfunc as usual
-    off(observable, f)
+    off(observable, obsfunc.f)
 end
 
 """
@@ -244,14 +276,12 @@ end
 
 Updates the value of an `Observable` to `val` and call its listeners.
 """
-function Base.setindex!(observable::Observable, val)
+function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val))
+    if observable.ignore_equal_values
+        isequal(observable.val, val) && return
+    end
     observable.val = val
-    notify(observable)
-    return val
-end
-
-function Base.setindex!(observable::AbstractObservable, val)
-    Base.setindex!(observe(observable), val)
+    return notify(observable)
 end
 
 """
@@ -260,8 +290,6 @@ end
 Returns the current value of `observable`.
 """
 Base.getindex(observable::Observable) = observable.val
-
-Base.getindex(observable::AbstractObservable) = getindex(observe(observable))
 
 ### Utilities
 
@@ -277,10 +305,8 @@ to_value(x) = isa(x, AbstractObservable) ? x[] : x  # noninferrable dispatch is 
 Gets a unique id for an observable.
 """
 obsid(observable::Observable) = string(objectid(observable))
-obsid(observable::AbstractObservable) = obsid(observe(observable))
 
 listeners(observable::Observable) = observable.listeners
-listeners(observable::AbstractObservable) = listeners(observe(observable))
 
 """
     onany(f, args...)
@@ -292,23 +318,18 @@ All other objects in `args` are passed as-is.
 
 See also: [`on`](@ref).
 """
-function onany(@nospecialize(f), args...; weak::Bool = false)
-    ff = (_) -> f(to_value.(args)...)
-    _onany(inferencebarrier(ff), args, weak)
-end
-
-@noinline function _onany(@nospecialize(callback), args, weak::Bool)
-    # store all returned ObserverFunctions
+function onany(f, args...; weak::Bool = false, priority::Int=0)
+    function callback(@nospecialize(x))
+        f(map(to_value, args)...)
+    end
     obsfuncs = ObserverFunction[]
     for observable in args
         if observable isa AbstractObservable
-            obsfunc = on(callback, observable, weak = weak)
+            obsfunc = on(callback, observable; weak=weak, priority=priority)
             push!(obsfuncs, obsfunc)
         end
     end
-    # same principle as with `on`, this collection needs to be
-    # stored by the caller or the connections made will be cut
-    obsfuncs
+    return obsfuncs
 end
 
 """
@@ -362,7 +383,7 @@ can handle any number type for which `sqrt` is defined.
     return observable
 end
 
-function appendinputs!(observable, obsfuncs)  # latency: separating this from map! allows dropping the specialization on `f`
+function appendinputs!(@nospecialize(observable), obsfuncs::Vector{ObserverFunction})  # latency: separating this from map! allows dropping the specialization on `f`
     if !isdefined(observable, :inputs)
         observable.inputs = obsfuncs
     else
@@ -378,15 +399,15 @@ Forwards all updates from `o2` to `o1`.
 
 See also [`Observables.ObservablePair`](@ref).
 """
-connect!(o1::AbstractObservable, o2::AbstractObservable) = map!(identity, o1, o2)
+connect!(o1::AbstractObservable, o2::AbstractObservable) = on(x-> o1[] = x, o2)
 
 """
-    obs = map(f, arg1::AbstractObservable, args...)
+    obs = map(f, arg1::AbstractObservable, args...; ignore_equal_values=false)
 
-Creates a new observable ref `obs` which contains the result of `f` applied to values
+Creates a new observable `obs` which contains the result of `f` applied to values
 extracted from `arg1` and `args` (i.e., `f(arg1[], ...)`.
-`arg1` must be an observable ref for dispatch reasons. `args` may contain any number of `Observable` objects.
-`f` will be passed the values contained in the refs as the respective argument.
+`arg1` must be an observable for dispatch reasons. `args` may contain any number of `Observable` objects.
+`f` will be passed the values contained in the observables as the respective argument.
 All other objects in `args` are passed as-is.
 
 If you don't need the value of `obs`, and just want to run `f` whenever the
@@ -402,51 +423,13 @@ Observable{$Int} with 0 listeners. Value:
 3
 ```
 """
-@inline function Base.map(f::F, arg1::AbstractObservable, args...) where F
+@inline function Base.map(f::F, arg1::AbstractObservable, args...; ignore_equal_values=false) where F
     # note: the @inline prevents de-specialization due to the splatting
-    map!(f, Observable(f(arg1[], map(to_value, args)...)), arg1, args...; update=false)
+    obs = Observable(f(arg1[], map(to_value, args)...); ignore_equal_values=ignore_equal_values)
+    map!(f, obs, arg1, args...; update=false)
+    return obs
 end
 
-"""
-    obs = observe_changes(arg::AbstractObservable, eq=(==))
-
-Returns an `Observable` which updates with the value of `arg` whenever the new value
-differs from the current value of `obs` according to the equality operator `eq`.
-
-# Example:
-```
-julia> obs = Observable(0);
-
-julia> obs_change = observe_changes(obs);
-
-julia> on(obs) do o
-           println("obs[] == \$o")
-       end;
-
-julia> on(obs_change) do o
-           println("obs_change[] == \$o")
-       end;
-
-julia> obs[] = 0;
-obs[] == 0
-
-julia> obs[] = 1;
-obs_change[] == 1
-obs[] == 1
-
-julia> obs[] = 1;
-obs[] == 1
-```
-"""
-function observe_changes(obs::AbstractObservable{T}, eq=(==)) where T
-    out = Observable{T}(obs[])
-    on(obs) do val
-        if !eq(val, out[])
-            out[] = val
-        end
-    end
-    out
-end
 
 """
     async_latest(observable::AbstractObservable, n=1)
@@ -529,6 +512,22 @@ methodlist(mi::Core.MethodInstance) = methodlist(Base.unwrap_unionall(mi.specTyp
 methodlist(obsf::ObserverFunction) = methodlist(obsf.f)
 methodlist(@nospecialize(f::Function)) = methodlist(typeof(f))
 
-@deprecate notify! notify
+Base.precompile(obsf::ObserverFunction) = precompile(obsf.f, (eltype(obsf.observable),))
+function Base.precompile(observable::Observable)
+    tf = true
+    T = eltype(observable)
+    for f in observable.listeners
+        precompile(f, (T,))
+    end
+    if isdefined(observable, :inputs)
+        for obsf in observable.inputs
+            tf &= precompile(obsf)
+        end
+    end
+    return tf
+end
+
+precompile(Core.convert, (Type{Observable{Any}}, Observable{Any}))
+precompile(Base.copy, (Type{Observable{Any}},))
 
 end # module
