@@ -193,6 +193,7 @@ current value is 5
 ```
 
 One can also give the callback a priority, to enable always calling a specific callback before/after others, independent of the order of registration.
+The callback with the highest priority gets called first, the default is zero, and the whole range of Int can be used.
 So one can do:
 
 ```julia
