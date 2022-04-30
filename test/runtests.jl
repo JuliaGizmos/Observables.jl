@@ -137,10 +137,12 @@ end
 @testset "construct and show" begin
     obs = Observable(5)
     @test string(obs) == "Observable{$Int} with 0 listeners. Value:\n5"
-    on(identity, obs)
+    f = on(identity, obs)
     @test string(obs) == "Observable{$Int} with 1 listeners. Value:\n5"
-    on(x->nothing, obs)
+    @test string(f) == "ObserverFunction `identity` operating on Observable{Int64} with 1 listeners. Value:\n5"
+    f = on(x->nothing, obs); ln = @__LINE__
     @test string(obs) == "Observable{$Int} with 2 listeners. Value:\n5"
+    @test string(f) == "ObserverFunction defined at $(@__FILE__):$ln operating on Observable{Int64} with 2 listeners. Value:\n5"
     obs[] = 7
     @test string(obs) == "Observable{$Int} with 2 listeners. Value:\n7"
     obs = Observable{Any}()
