@@ -116,13 +116,46 @@ function Base.notify(@nospecialize(observable::AbstractObservable))
     return false
 end
 
+function showcompact(io, @nospecialize(value))
+    ioc = IOContext(io, :compact => true)
+    show(ioc, MIME"text/plain"(), value)
+end
+
 function Base.show(io::IO, x::Observable{T}) where T
-    println(io, "Observable{$T} with $(length(x.listeners)) listeners. Value:")
+    print(io, "Observable")
+    real_eltype = T
     if isdefined(x, :val)
+        real_eltype = typeof(x[])
+        if T === typeof(x[])
+            # eltype isn't special and matches observable type so no need to print it
+            print(io, "(")
+        else
+            print(io, "{$T}(")
+        end
         show(io, x.val)
     else
-        print(io, "not assigned yet!")
+        print(io, "{$T}(#undefined")
     end
+    print(io, ")")
+    for (prio, callback) in listeners(x)
+        println(io)
+        print(io, "    ")
+        if typemax(Int) == prio
+            print(io, "typemax(Int)")
+        elseif typemin(Int) == prio
+            print(io, "typemin(Int)")
+        else
+            print(io, prio)
+        end
+        print(io, " => ")
+        show_callback(io, callback, Tuple{real_eltype})
+    end
+end
+
+function show_callback(io::IO, @nospecialize(f), @nospecialize(arg_types))
+    m = first(methods(f, arg_types))
+    show(io, m)
+    return
 end
 
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
@@ -329,6 +362,40 @@ obsid(observable::Observable) = string(objectid(observable))
 
 listeners(observable::Observable) = observable.listeners
 
+
+struct OnAny <: Function
+    f::Any
+    args::Any
+end
+
+function (onany::OnAny)(@nospecialize(value))
+    return onany.f(map(to_value, onany.args)...)
+end
+
+function show_callback(io::IO, onany::OnAny, @nospecialize(argtype))
+    print(io, "onany(")
+    show_callback(io, onany.f, eltype.(onany.args))
+    print(io, ")")
+end
+
+
+struct MapCallback <: Function
+    f::Any
+    result::Observable
+    args::Any
+end
+
+function (mc::MapCallback)(@nospecialize(value))
+    mc.result[] = Base.invokelatest(mc.f, map(to_value, mc.args)...)
+    return
+end
+
+function show_callback(io::IO, mc::MapCallback, @nospecialize(argtype))
+    print(io, "map(")
+    show_callback(io, mc.f, typeof(mc.args))
+    print(io, ")")
+end
+
 """
     onany(f, args...)
 
@@ -340,9 +407,7 @@ All other objects in `args` are passed as-is.
 See also: [`on`](@ref).
 """
 function onany(f, args...; weak::Bool = false, priority::Int=0)
-    function callback(@nospecialize(x))
-        f(map(to_value, args)...)
-    end
+    callback = OnAny(f, args)
     obsfuncs = ObserverFunction[]
     for observable in args
         if observable isa AbstractObservable
@@ -354,14 +419,14 @@ function onany(f, args...; weak::Bool = false, priority::Int=0)
 end
 
 """
-    map!(f, observable::AbstractObservable, args...; update::Bool=true)
+    map!(f, result::AbstractObservable, args...; update::Bool=true)
 
-Updates `observable` with the result of calling `f` with values extracted from args.
+Updates `result` with the result of calling `f` with values extracted from args.
 `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 
-By default `observable` gets updated immediately, but this can be suppressed by specifying `update=false`.
+By default `result` gets updated immediately, but this can be suppressed by specifying `update=false`.
 
 # Example
 
@@ -392,16 +457,15 @@ Observable{Number} with 0 listeners. Value:
 
 can handle any number type for which `sqrt` is defined.
 """
-@inline function Base.map!(@nospecialize(f), observable::AbstractObservable, os...; update::Bool=true)
+@inline function Base.map!(@nospecialize(f), result::AbstractObservable, os...; update::Bool=true)
     # note: the @inline prevents de-specialization due to the splatting
-    obsfuncs = onany(os...) do args...
-        observable[] = Base.invokelatest(f, args...)
+    callback = MapCallback(f, result, os)
+    # appendinputs!(result, obsfuncs)
+    for o in os
+        o isa AbstractObservable && on(callback, o)
     end
-    appendinputs!(observable, obsfuncs)
-    if update
-        observable[] = f(map(to_value, os)...)
-    end
-    return observable
+    update && callback(nothing)
+    return result
 end
 
 function appendinputs!(@nospecialize(observable), obsfuncs::Vector{ObserverFunction})  # latency: separating this from map! allows dropping the specialization on `f`
