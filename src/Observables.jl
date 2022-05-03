@@ -44,6 +44,14 @@ mutable struct Observable{T} <: AbstractObservable{T}
     end
 end
 
+"""
+    obsid(observable::Observable)
+
+Gets a unique id for an observable.
+"""
+obsid(observable::Observable) = string(objectid(observable))
+obsid(obs::AbstractObservable) = obsid(observe(obs))
+
 function Base.getproperty(obs::Observable, field::Symbol)
     if field === :id
         return obsid(obs)
@@ -51,8 +59,6 @@ function Base.getproperty(obs::Observable, field::Symbol)
         getfield(obs, field)
     end
 end
-
-ignore_equal_values(@nospecialize(obs))::Bool = obs isa Observable ? obs.ignore_equal_values : false
 
 Observable(val::T; ignore_equal_values::Bool=false) where {T} = Observable{T}(val; ignore_equal_values)
 
@@ -65,10 +71,39 @@ observe(x::Observable) = x
 Base.getindex(obs::AbstractObservable) = getindex(observe(obs))
 Base.setindex!(obs::AbstractObservable, val) = setindex!(observe(obs), val)
 listeners(obs::AbstractObservable) = listeners(observe(obs))
-obsid(obs::AbstractObservable) = obsid(observe(obs))
+listeners(observable::Observable) = observable.listeners
+
+"""
+    observable[] = val
+
+Updates the value of an `Observable` to `val` and call its listeners.
+"""
+function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val))
+    if observable.ignore_equal_values
+        isequal(observable.val, val) && return
+    end
+    observable.val = val
+    return notify(observable)
+end
+
+"""
+    observable[]
+
+Returns the current value of `observable`.
+"""
+Base.getindex(observable::Observable) = observable.val
+
+### Utilities
+
+"""
+    to_value(x::Union{Any, AbstractObservable})
+Extracts the value of an observable, and returns the object if it's not an observable!
+"""
+to_value(x) = isa(x, AbstractObservable) ? x[] : x  # noninferrable dispatch is faster if there is only one Method
+
 
 function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
-    ls = observable.listeners::Vector{Pair{Int, Any}}
+    ls = listeners(observable)::Vector{Pair{Int, Any}}
     idx = searchsortedlast(ls, priority; by=first, rev=true)
     insert!(ls, idx + 1, priority => f)
     return
@@ -76,13 +111,13 @@ end
 
 function Base.convert(::Type{P}, observable::AbstractObservable) where P <: Observable
     result = P(observable[])
-    register_callback(observable, 0, x-> result[] = x)
+    on(x-> result[] = x, observable)
     return result
 end
 
 function Base.copy(observable::Observable{T}) where T
     result = Observable{T}(observable[])
-    register_callback(observable, 0, x-> result[] = x)
+    on(x-> result[] = x, observable)
     return result
 end
 
@@ -90,8 +125,6 @@ Base.convert(::Type{T}, x::T) where {T<:Observable} = x  # resolves ambiguity wi
 Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
 Base.convert(::Type{Observable{Any}}, x::AbstractObservable{Any}) = x
 Base.convert(::Type{Observables.Observable{Any}}, x::Observables.Observable{Any}) = x
-
-
 
 struct Consume
     x::Bool
@@ -213,7 +246,6 @@ Base.show(io::IO, ::MIME"text/plain", obsf::ObserverFunction) = show(io, obsf)
 Base.print(io::IO, obsf::ObserverFunction) = show(io, obsf)   # Base.print is specialized for ::Function
 
 
-
 """
     on(f, observable::AbstractObservable; weak = false, priority=0, update=false)::ObserverFunction
 
@@ -325,44 +357,6 @@ function off(obsfunc::ObserverFunction)
     off(obsfunc.observable, obsfunc)
 end
 
-"""
-    observable[] = val
-
-Updates the value of an `Observable` to `val` and call its listeners.
-"""
-function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val))
-    if observable.ignore_equal_values
-        isequal(observable.val, val) && return
-    end
-    observable.val = val
-    return notify(observable)
-end
-
-"""
-    observable[]
-
-Returns the current value of `observable`.
-"""
-Base.getindex(observable::Observable) = observable.val
-
-### Utilities
-
-"""
-    to_value(x::Union{Any, AbstractObservable})
-Extracts the value of an observable, and returns the object if it's not an observable!
-"""
-to_value(x) = isa(x, AbstractObservable) ? x[] : x  # noninferrable dispatch is faster if there is only one Method
-
-"""
-    obsid(observable::Observable)
-
-Gets a unique id for an observable.
-"""
-obsid(observable::Observable) = string(objectid(observable))
-
-listeners(observable::Observable) = observable.listeners
-
-
 struct OnAny <: Function
     f::Any
     args::Any
@@ -395,6 +389,7 @@ function show_callback(io::IO, mc::MapCallback, @nospecialize(argtype))
     show_callback(io, mc.f, typeof(mc.args))
     print(io, ")")
 end
+
 
 """
     onany(f, args...)
@@ -484,7 +479,7 @@ Forwards all updates from `o2` to `o1`.
 
 See also [`Observables.ObservablePair`](@ref).
 """
-connect!(o1::AbstractObservable, o2::AbstractObservable) = on(x-> o1[] = x, o2)
+connect!(o1::AbstractObservable, o2::AbstractObservable) = on(x-> o1[] = x, o2; update=true)
 
 """
     obs = map(f, arg1::AbstractObservable, args...; ignore_equal_values=false)
