@@ -356,7 +356,7 @@ onall(f, obs1) = error("onall needs at least two observables")
     onall(f, args...)
 
 Calls `f` on updates to all observable refs in `args`.
-`f` is called only if all (i.e. not any) observable refs in `args` are updated at least once.
+`f` is called only if *all* (as opposed to any) observable refs in `args` are updated at least once.
 `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
