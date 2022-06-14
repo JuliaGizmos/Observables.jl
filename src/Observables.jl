@@ -101,6 +101,12 @@ Extracts the value of an observable, and returns the object if it's not an obser
 """
 to_value(x) = isa(x, AbstractObservable) ? x[] : x  # noninferrable dispatch is faster if there is only one Method
 
+struct SetindexCallback
+    obs::Observable
+end
+
+(sc::SetindexCallback)(@nospecialize(x)) = (sc.obs[] = x)
+
 
 function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
     ls = listeners(observable)::Vector{Pair{Int, Any}}
@@ -111,13 +117,13 @@ end
 
 function Base.convert(::Type{P}, observable::AbstractObservable) where P <: Observable
     result = P(observable[])
-    on(x-> result[] = x, observable)
+    register_callback(observable, 0, SetindexCallback(result))
     return result
 end
 
 function Base.copy(observable::Observable{T}) where T
     result = Observable{T}(observable[])
-    on(x-> result[] = x, observable)
+    register_callback(observable, 0, SetindexCallback(result))
     return result
 end
 
@@ -149,11 +155,6 @@ function Base.notify(@nospecialize(observable::AbstractObservable))
     return false
 end
 
-function showcompact(io, @nospecialize(value))
-    ioc = IOContext(io, :compact => true)
-    show(ioc, MIME"text/plain"(), value)
-end
-
 function Base.show(io::IO, x::Observable{T}) where T
     print(io, "Observable")
     real_eltype = T
@@ -167,27 +168,34 @@ function Base.show(io::IO, x::Observable{T}) where T
         end
         show(io, x.val)
     else
-        print(io, "{$T}(#undefined")
+        print(io, "{$T}(#undef")
     end
     print(io, ")")
-    for (prio, callback) in listeners(x)
-        println(io)
-        print(io, "    ")
-        if typemax(Int) == prio
-            print(io, "typemax(Int)")
-        elseif typemin(Int) == prio
-            print(io, "typemin(Int)")
-        else
-            print(io, prio)
-        end
-        print(io, " => ")
-        show_callback(io, callback, Tuple{real_eltype})
-    end
+    # if !get(io, :compact, false)
+    #     for (prio, callback) in listeners(x)
+    #         println(io)
+    #         print(io, "    ")
+    #         if typemax(Int) == prio
+    #             print(io, "typemax(Int)")
+    #         elseif typemin(Int) == prio
+    #             print(io, "typemin(Int)")
+    #         else
+    #             print(io, prio)
+    #         end
+    #         print(io, " => ")
+    #         show_callback(io, callback, Tuple{real_eltype})
+    #     end
+    # end
 end
 
 function show_callback(io::IO, @nospecialize(f), @nospecialize(arg_types))
-    m = first(methods(f, arg_types))
-    show(io, m)
+    meths = methods(f, arg_types)
+    if isempty(meths)
+        show(io, f)
+    else
+        m = first(methods(f, arg_types))
+        show(io, m)
+    end
     return
 end
 
@@ -227,9 +235,11 @@ mutable struct ObserverFunction <: Function
 end
 
 function Base.show(io::IO, obsf::ObserverFunction)
+    io = IOContext(io, :compact => true)
     showdflt(io, @nospecialize(f), obs) = print(io, "ObserverFunction `", f, "` operating on ", obs)
 
     nm = string(nameof(obsf.f))
+
     if !occursin('#', nm)
         showdflt(io, obsf.f, obsf.observable)
     else
@@ -363,7 +373,7 @@ struct OnAny <: Function
 end
 
 function (onany::OnAny)(@nospecialize(value))
-    return onany.f(map(to_value, onany.args)...)
+    return Base.invokelatest(onany.f, map(to_value, onany.args)...)
 end
 
 function show_callback(io::IO, onany::OnAny, @nospecialize(argtype))
@@ -371,7 +381,6 @@ function show_callback(io::IO, onany::OnAny, @nospecialize(argtype))
     show_callback(io, onany.f, eltype.(onany.args))
     print(io, ")")
 end
-
 
 struct MapCallback <: Function
     f::Any
