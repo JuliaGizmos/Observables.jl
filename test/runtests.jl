@@ -135,16 +135,21 @@ end
 end
 
 @testset "construct and show" begin
+    plain(x) = sprint(io-> show(io, MIME"text/plain"(), x))
     obs = Observable(5)
     @test string(obs) == "Observable(5)"
     f = on(identity, obs)
-    @test string(obs) == "Observable(5)\n    0 => identity(x) in Base at operators.jl:513"
+    @test occursin("Observable(5)\n    0 => identity(x) in Base at operators.jl", plain(obs))
     @test string(f) == "ObserverFunction `identity` operating on Observable(5)"
     f = on(x->nothing, obs); ln = @__LINE__
-    @test string(obs) == "Observable(5)\n    0 => identity(x) in Base at operators.jl:513\n    0 => (::var\"#11#12\")(x) in Main at $(@__FILE__):$ln"
+    str = plain(obs)
+    @test occursin("Observable(5)", str)
+    @test occursin("0 => identity(x) in Base at operators.jl", str)
+    @test occursin(" in Main at $(@__FILE__)", str)
+
     @test string(f) == "ObserverFunction defined at $(@__FILE__):$ln operating on Observable(5)"
     obs[] = 7
-    @test string(obs) == "Observable(7)\n    0 => identity(x) in Base at operators.jl:513\n    0 => (::var\"#11#12\")(x) in Main at $(@__FILE__):$ln"
+    @test occursin("Observable(7)", plain(obs))
     obs = Observable{Any}()
     @test string(obs) == "Observable{Any}(#undef)"
 end

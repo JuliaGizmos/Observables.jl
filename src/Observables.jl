@@ -155,7 +155,7 @@ function Base.notify(@nospecialize(observable::AbstractObservable))
     return false
 end
 
-function Base.show(io::IO, x::Observable{T}) where T
+function print_value(io::IO, x::Observable{T}; print_listeners=false) where T
     print(io, "Observable")
     real_eltype = T
     if isdefined(x, :val)
@@ -171,21 +171,30 @@ function Base.show(io::IO, x::Observable{T}) where T
         print(io, "{$T}(#undef")
     end
     print(io, ")")
-    # if !get(io, :compact, false)
-    #     for (prio, callback) in listeners(x)
-    #         println(io)
-    #         print(io, "    ")
-    #         if typemax(Int) == prio
-    #             print(io, "typemax(Int)")
-    #         elseif typemin(Int) == prio
-    #             print(io, "typemin(Int)")
-    #         else
-    #             print(io, prio)
-    #         end
-    #         print(io, " => ")
-    #         show_callback(io, callback, Tuple{real_eltype})
-    #     end
-    # end
+    if print_listeners
+        for (prio, callback) in listeners(x)
+            println(io)
+            print(io, "    ")
+            if typemax(Int) == prio
+                print(io, "typemax(Int)")
+            elseif typemin(Int) == prio
+                print(io, "typemin(Int)")
+            else
+                print(io, prio)
+            end
+            print(io, " => ")
+            show_callback(io, callback, Tuple{real_eltype})
+        end
+    end
+end
+
+function Base.show(io::IO, x::Observable{T}) where T
+    print_value(io, x)
+end
+
+function Base.show(io::IO, ::MIME"text/plain", x::Observable{T}) where T
+    print_value(io, x; print_listeners=!get(io, :compact, false))
+    return
 end
 
 function show_callback(io::IO, @nospecialize(f), @nospecialize(arg_types))
