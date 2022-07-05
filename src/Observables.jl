@@ -121,9 +121,10 @@ end
 
 for f in (:push!, :pushfirst!, :pop!, :popfirst!)
     Core.eval(@__MODULE__, """
-    function  $f(obs::AbstractObservable{T}, val) where T
+    function Base.$f(@nospecialize(obs::AbstractObservable), @nospecialize(val))
         $f(getfield(observe(obs), :val), val)
-        Observables.notify(obs)
+        notify(obs)
+        getfield(observe(obs), :val)
     end
   """ |> Meta.parse)
 end
