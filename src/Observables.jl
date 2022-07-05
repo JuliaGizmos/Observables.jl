@@ -87,11 +87,11 @@ Base.getindex(observable::Observable) = observable.val
 
 # pass indexing and property methods to referenced variable
 # at least one index
-function Base.getindex(obs::AbstractObservable, arg1, args...)
+function Base.getindex(@nospecialize(obs::AbstractObservable), arg1, args...)
     getindex(getfield(observe(obs), :val), arg1, args...)
 end
 
-function Base.setindex!(obs::AbstractObservable, val, arg1, args...)
+function Base.setindex!(@nospecialize(obs::AbstractObservable), val, arg1, args...)
     setindex!(getfield(observe(obs), :val), val, arg1, args...)
     Observables.notify(obs)
 end
