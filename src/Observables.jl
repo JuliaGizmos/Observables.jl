@@ -104,8 +104,8 @@ function Base.getproperty(obs::T, field::Symbol) where T <: AbstractObservable
     if field === :id
         return obsid(obs)
     elseif field in fieldnames(T)
-        getfield(obs, field)
-    else
+        getfield(observe(obs), field)
+    elseif field in fieldnames(Observable)
         getproperty(getfield(observe(obs), :val), field)
     end
 end
