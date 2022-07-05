@@ -33,14 +33,14 @@ mutable struct Observable{T} <: AbstractObservable{T}
 
     listeners::Vector{Pair{Int, Any}}
     inputs::Vector{Any}  # for map!ed Observables
-    isvalid::Union{Nothing, Function}
+    isinvalid::Union{Nothing, Function}
     val::T
 
     function Observable{T}(; ignore_equal_values::Bool=false) where {T}
-        return new{T}(Pair{Int, Any}[], [], ignore_equal_values ? !isequal : nothing)
+        return new{T}(Pair{Int, Any}[], [], ignore_equal_values ? isequal : nothing)
     end
     function Observable{T}(@nospecialize(val); ignore_equal_values::Bool=false) where {T}
-        return new{T}(Pair{Int, Any}[], [], ignore_equal_values ? !isequal : nothing, val)
+        return new{T}(Pair{Int, Any}[], [], ignore_equal_values ? isequal : nothing, val)
     end
 end
 
@@ -79,8 +79,8 @@ listeners(observable::Observable) = observable.listeners
 Updates the value of an `Observable` to `val` and call its listeners.
 """
 function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val))
-    if !isnothing(observable.isvalid)
-        observable.isvalid(observable.val, val) || return
+    if !isnothing(observable.isinvalid)
+        observable.isinvalid(observable.val, val) && return
     end
     observable.val = val
     return notify(observable)
