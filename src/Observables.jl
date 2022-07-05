@@ -103,9 +103,11 @@ Base.getindex(@nospecialize(obs::AbstractObservable), ::typeof(!)) = getfield(ob
 function Base.getproperty(obs::T, field::Symbol) where T <: AbstractObservable
     if field === :id
         return obsid(obs)
-    elseif field in fieldnames(T)
-        getfield(observe(obs), field)
+    elseif T !== Observable && field in fieldnames(T)
+        getfield(obs, field)
     elseif field in fieldnames(Observable)
+        getfield(observe(obs), field)
+    else
         getproperty(getfield(observe(obs), :val), field)
     end
 end
