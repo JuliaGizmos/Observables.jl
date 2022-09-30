@@ -86,6 +86,9 @@ function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val
     return notify(observable)
 end
 
+# For external packages that don't want to access an internal field
+setexcludinghandlers!(obs::AbstractObservable, val) = observe(obs).val = val
+
 """
     observable[]
 
