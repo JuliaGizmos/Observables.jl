@@ -413,6 +413,18 @@ end
 
 
 """
+    clear(obs::Observable)
+
+Empties all listeners and clears all inputs, removing the observable from all interactions with it's parent.
+"""
+function clear(@nospecialize(obs::Observable))
+    for input in obs.inputs
+        off(input)
+    end
+    empty!(obs.listeners)
+end
+
+"""
     onany(f, args...)
 
 Calls `f` on updates to any observable refs in `args`.
