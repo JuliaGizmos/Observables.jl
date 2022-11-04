@@ -167,7 +167,7 @@ end
     r[] = 3 # shouldn't call test
 end
 
-@testset "onany and map" begin
+@testset "onany, onall, and map" begin
     r = Observable(0)
     tested = Ref(false)
     onany(1, r) do x, y
@@ -176,6 +176,19 @@ end
         tested[] = true
     end
     r[] = 2
+    @test tested[]
+
+    r1 = Observable(0)
+    r2 = Observable(0)
+    tested = Ref(false)
+    onall(r1, r2) do x, y
+        @test x == 1
+        @test y == 2
+        tested[] = true
+    end
+    r1[] = 1
+    @test !tested[]
+    r2[] = 2
     @test tested[]
 
     r1 = Observable(0)
@@ -339,14 +352,14 @@ end
 
     o = Observable(0)
     cnt[] = 0
-    function compute_something(x)
+    function compute_something_else(x)
         for i=1:10^8; rand() end
         cnt[] = cnt[] + 1
     end
     sleep(1)
     o_latest = async_latest(o, 3)
 
-    on(compute_something, o_latest) # compute something on the latest update
+    on(compute_something_else, o_latest) # compute something on the latest update
     for i=1:5
         o[] = i
     end

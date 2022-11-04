@@ -1,6 +1,6 @@
 module Observables
 
-export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+export Observable, on, off, onany, onall, connect!, obsid, async_latest, throttle
 export Consume, ObserverFunction, AbstractObservable
 
 import Base.Iterators.filter
@@ -349,6 +349,38 @@ function onany(f, args...; weak::Bool = false, priority::Int=0)
         end
     end
     return obsfuncs
+end
+
+
+onall(f) = error("onall needs at least two observables")
+onall(f, obs1) = error("onall needs at least two observables")
+
+"""
+    onall(f, args...)
+
+Calls `f` on updates to all observable refs in `args`.
+`f` is called only if *all* (as opposed to any) observable refs in `args` are updated at least once.
+`args` may contain any number of `Observable` objects.
+`f` will be passed the values contained in the refs as the respective argument.
+All other objects in `args` are passed as-is.
+
+See also: [`on`](@ref).
+"""
+function onall(f, observables...; condition=(old, new)-> true)
+    updated = fill(false, length(observables))
+    for (i, observable) in enumerate(observables)
+        old = observable[]
+        on(observable) do new_value
+            if condition(old, new_value)
+                updated[i] = true
+                if all(updated)
+                    f(to_value.(observables)...)
+                    fill!(updated, false)
+                end
+            end
+            old = new_value
+        end
+    end
 end
 
 """
