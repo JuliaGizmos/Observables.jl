@@ -117,7 +117,7 @@ function pair_searchsortedlast(values::Vector{Pair{Int, Any}}, prio::Int)::Int
     lo = 0
     hi = length(values) + u
     @inbounds while lo < hi - u
-        m = Base.midpoint(lo, hi)
+        m = lo + ((hi - lo) >>> 0x01) # Base.midpoint, not available in 1.6
         if isless(values[m][1], prio)
             hi = m
         else
@@ -200,18 +200,21 @@ function print_value(io::IO, x::Observable{T}; print_listeners=false) where T
             for (prio, callback) in ls
                 print(io, "    ", prio, " => ")
                 show_callback(io, callback, Tuple{real_eltype})
+                println(io)
             end
         else # we cut out the middle if we have too many listeners
             half = max_listeners ÷ 2
             for (prio, callback) in view(ls, 1:half)
                 print(io, "    ", prio, " => ")
                 show_callback(io, callback, Tuple{real_eltype})
+                println(io)
             end
             println(io, "\n    ...")
             last_n = length(ls) - half
             for (prio, callback) in view(ls, last_n:length(ls))
                 print(io, "    ", prio, " => ")
                 show_callback(io, callback, Tuple{real_eltype})
+                println(io)
             end
         end
     end
