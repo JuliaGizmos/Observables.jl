@@ -2,10 +2,10 @@ using Documenter, Observables
 
 makedocs(
     modules = [Observables],
-    clean = false,
     format = Documenter.HTML(),
     sitename = "Observables.jl",
     authors = "JuliaGizmos",
+    strict=true, # make docs fail
     pages = Any["Home" => "index.md"],
 )
 

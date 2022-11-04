@@ -315,16 +315,14 @@ observable connections are removed automatically.
 
 # Example
 
-```jldoctest; setup=:(using Observables)
+```julia
 julia> obs = Observable(0)
-Observable{Int} with 0 listeners. Value:
-0
+Observable(0)
 
 julia> on(obs) do val
            println("current value is ", val)
        end
-(::Observables.ObserverFunction) (generic function with 0 methods)
-
+ObserverFunction defined at REPL[17]:2 operating on Observable(0)
 julia> obs[] = 5;
 current value is 5
 ```
@@ -491,16 +489,14 @@ We'll create an observable that can hold an arbitrary number:
 
 ```jldoctest map!; setup=:(using Observables)
 julia> obs = Observable{Number}(3)
-Observable{Number} with 0 listeners. Value:
-3
+Observable{Number}(3)
 ```
 
 Now,
 
 ```jldoctest map!
 julia> obsrt1 = map(sqrt, obs)
-Observable{Float64} with 0 listeners. Value:
-1.7320508075688772
+Observable(1.7320508075688772)
 ```
 
 creates an `Observable{Float64}`, which will fail to update if we set `obs[] = 3+4im`.
@@ -508,8 +504,7 @@ However,
 
 ```jldoctest map!
 julia> obsrt2 = map!(sqrt, Observable{Number}(), obs)
-Observable{Number} with 0 listeners. Value:
-1.7320508075688772
+Observable{Number}(1.7320508075688772)
 ```
 
 can handle any number type for which `sqrt` is defined.
@@ -561,8 +556,7 @@ arguments update, use [`on`](@ref) or [`onany`](@ref) instead.
 julia> obs = Observable([1,2,3]);
 
 julia> map(length, obs)
-Observable{$Int} with 0 listeners. Value:
-3
+Observable(3)
 ```
 """
 @inline function Base.map(f::F, arg1::AbstractObservable, args...; ignore_equal_values=false) where F
