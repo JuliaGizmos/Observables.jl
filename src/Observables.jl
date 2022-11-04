@@ -192,18 +192,27 @@ function print_value(io::IO, x::Observable{T}; print_listeners=false) where T
     end
     print(io, ")")
     if print_listeners
-        for (prio, callback) in listeners(x)
-            println(io)
-            print(io, "    ")
-            if typemax(Int) == prio
-                print(io, "typemax(Int)")
-            elseif typemin(Int) == prio
-                print(io, "typemin(Int)")
-            else
-                print(io, prio)
+        ls = listeners(x)
+        max_listeners = 20
+        println(io)
+        # Truncation of too many listeners:
+        if length(ls) <= max_listeners # we show the whole thing
+            for (prio, callback) in ls
+                print(io, "    ", prio, " => ")
+                show_callback(io, callback, Tuple{real_eltype})
             end
-            print(io, " => ")
-            show_callback(io, callback, Tuple{real_eltype})
+        else # we cut out the middle if we have too many listeners
+            half = max_listeners ÷ 2
+            for (prio, callback) in view(ls, 1:half)
+                print(io, "    ", prio, " => ")
+                show_callback(io, callback, Tuple{real_eltype})
+            end
+            println(io, "\n    ...")
+            last_n = length(ls) - half
+            for (prio, callback) in view(ls, last_n:length(ls))
+                print(io, "    ", prio, " => ")
+                show_callback(io, callback, Tuple{real_eltype})
+            end
         end
     end
 end
