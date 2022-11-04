@@ -111,10 +111,27 @@ end
 (sc::SetindexCallback)(@nospecialize(x)) = (sc.obs[] = x)
 
 
+# Optimized version of Base.searchsortedlast (optimized for our use case of pairs)
+function pair_searchsortedlast(values::Vector{Pair{Int, Any}}, prio::Int)::Int
+    u = 1
+    lo = 0
+    hi = length(values) + u
+    @inbounds while lo < hi - u
+        m = Base.midpoint(lo, hi)
+        if isless(values[m][1], prio)
+            hi = m
+        else
+            lo = m
+        end
+    end
+    return lo
+end
+
 function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
     ls = listeners(observable)::Vector{Pair{Int, Any}}
-    idx = searchsortedlast(ls, priority; by=first, rev=true)
-    insert!(ls, idx + 1, priority => f)
+    idx = pair_searchsortedlast(ls, priority)
+    p = Pair{Int, Any}(priority, f) # faster than priority => f because of convert
+    insert!(ls, idx + 1, p)
     return
 end
 
