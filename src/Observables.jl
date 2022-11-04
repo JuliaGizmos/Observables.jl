@@ -104,23 +104,46 @@ Extracts the value of an observable, and returns the object if it's not an obser
 """
 to_value(x) = isa(x, AbstractObservable) ? x[] : x  # noninferrable dispatch is faster if there is only one Method
 
+struct SetindexCallback
+    obs::Observable
+end
+
+(sc::SetindexCallback)(@nospecialize(x)) = (sc.obs[] = x)
+
+
+# Optimized version of Base.searchsortedlast (optimized for our use case of pairs)
+function pair_searchsortedlast(values::Vector{Pair{Int, Any}}, prio::Int)::Int
+    u = 1
+    lo = 0
+    hi = length(values) + u
+    @inbounds while lo < hi - u
+        m = lo + ((hi - lo) >>> 0x01) # Base.midpoint, not available in 1.6
+        if isless(values[m][1], prio)
+            hi = m
+        else
+            lo = m
+        end
+    end
+    return lo
+end
 
 function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
     ls = listeners(observable)::Vector{Pair{Int, Any}}
-    idx = searchsortedlast(ls, priority; by=first, rev=true)
-    insert!(ls, idx + 1, priority => f)
+    idx = pair_searchsortedlast(ls, priority)
+    p = Pair{Int, Any}(priority, f) # faster than priority => f because of convert
+    insert!(ls, idx + 1, p)
     return
 end
 
 function Base.convert(::Type{P}, observable::AbstractObservable) where P <: Observable
     result = P(observable[])
-    on(x-> result[] = x, observable)
+    register_callback(observable, 0, SetindexCallback(result))
     return result
 end
 
 function Base.copy(observable::Observable{T}) where T
     result = Observable{T}(observable[])
-    on(x-> result[] = x, observable)
+    register_callback(observable, 0, SetindexCallback(result))
     return result
 end
 
@@ -152,13 +175,69 @@ function Base.notify(@nospecialize(observable::AbstractObservable))
     return false
 end
 
-function Base.show(io::IO, x::Observable{T}) where T
-    println(io, "Observable{$T} with $(length(x.listeners)) listeners. Value:")
+function print_value(io::IO, x::Observable{T}; print_listeners=false) where T
+    print(io, "Observable")
+    real_eltype = T
     if isdefined(x, :val)
+        real_eltype = typeof(x[])
+        if T === typeof(x[])
+            # eltype isn't special and matches observable type so no need to print it
+            print(io, "(")
+        else
+            print(io, "{$T}(")
+        end
         show(io, x.val)
     else
-        print(io, "not assigned yet!")
+        print(io, "{$T}(#undef")
     end
+    print(io, ")")
+    if print_listeners
+        ls = listeners(x)
+        max_listeners = 20
+        println(io)
+        # Truncation of too many listeners:
+        if length(ls) <= max_listeners # we show the whole thing
+            for (prio, callback) in ls
+                print(io, "    ", prio, " => ")
+                show_callback(io, callback, Tuple{real_eltype})
+                println(io)
+            end
+        else # we cut out the middle if we have too many listeners
+            half = max_listeners ÷ 2
+            for (prio, callback) in view(ls, 1:half)
+                print(io, "    ", prio, " => ")
+                show_callback(io, callback, Tuple{real_eltype})
+                println(io)
+            end
+            println(io, "\n    ...")
+            last_n = length(ls) - half
+            for (prio, callback) in view(ls, last_n:length(ls))
+                print(io, "    ", prio, " => ")
+                show_callback(io, callback, Tuple{real_eltype})
+                println(io)
+            end
+        end
+    end
+end
+
+function Base.show(io::IO, x::Observable{T}) where T
+    print_value(io, x)
+end
+
+function Base.show(io::IO, ::MIME"text/plain", x::Observable{T}) where T
+    print_value(io, x; print_listeners=!get(io, :compact, false))
+    return
+end
+
+function show_callback(io::IO, @nospecialize(f), @nospecialize(arg_types))
+    meths = methods(f, arg_types)
+    if isempty(meths)
+        show(io, f)
+    else
+        m = first(methods(f, arg_types))
+        show(io, m)
+    end
+    return
 end
 
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
@@ -197,9 +276,11 @@ mutable struct ObserverFunction <: Function
 end
 
 function Base.show(io::IO, obsf::ObserverFunction)
+    io = IOContext(io, :compact => true)
     showdflt(io, @nospecialize(f), obs) = print(io, "ObserverFunction `", f, "` operating on ", obs)
 
     nm = string(nameof(obsf.f))
+
     if !occursin('#', nm)
         showdflt(io, obsf.f, obsf.observable)
     else
@@ -327,6 +408,51 @@ function off(obsfunc::ObserverFunction)
     off(obsfunc.observable, obsfunc)
 end
 
+struct OnAny <: Function
+    f::Any
+    args::Any
+end
+
+function (onany::OnAny)(@nospecialize(value))
+    return Base.invokelatest(onany.f, map(to_value, onany.args)...)
+end
+
+function show_callback(io::IO, onany::OnAny, @nospecialize(argtype))
+    print(io, "onany(")
+    show_callback(io, onany.f, eltype.(onany.args))
+    print(io, ")")
+end
+
+struct MapCallback <: Function
+    f::Any
+    result::Observable
+    args::Any
+end
+
+function (mc::MapCallback)(@nospecialize(value))
+    mc.result[] = Base.invokelatest(mc.f, map(to_value, mc.args)...)
+    return
+end
+
+function show_callback(io::IO, mc::MapCallback, @nospecialize(argtype))
+    print(io, "map(")
+    show_callback(io, mc.f, typeof(mc.args))
+    print(io, ")")
+end
+
+
+"""
+    clear(obs::Observable)
+
+Empties all listeners and clears all inputs, removing the observable from all interactions with it's parent.
+"""
+function clear(@nospecialize(obs::Observable))
+    for input in obs.inputs
+        off(input)
+    end
+    empty!(obs.listeners)
+end
+
 """
     onany(f, args...)
 
@@ -338,9 +464,7 @@ All other objects in `args` are passed as-is.
 See also: [`on`](@ref).
 """
 function onany(f, args...; weak::Bool = false, priority::Int=0)
-    function callback(@nospecialize(x))
-        f(map(to_value, args)...)
-    end
+    callback = OnAny(f, args)
     obsfuncs = ObserverFunction[]
     for observable in args
         if observable isa AbstractObservable
@@ -352,14 +476,14 @@ function onany(f, args...; weak::Bool = false, priority::Int=0)
 end
 
 """
-    map!(f, observable::AbstractObservable, args...; update::Bool=true)
+    map!(f, result::AbstractObservable, args...; update::Bool=true)
 
-Updates `observable` with the result of calling `f` with values extracted from args.
+Updates `result` with the result of calling `f` with values extracted from args.
 `args` may contain any number of `Observable` objects.
 `f` will be passed the values contained in the refs as the respective argument.
 All other objects in `args` are passed as-is.
 
-By default `observable` gets updated immediately, but this can be suppressed by specifying `update=false`.
+By default `result` gets updated immediately, but this can be suppressed by specifying `update=false`.
 
 # Example
 
@@ -390,16 +514,15 @@ Observable{Number} with 0 listeners. Value:
 
 can handle any number type for which `sqrt` is defined.
 """
-@inline function Base.map!(@nospecialize(f), observable::AbstractObservable, os...; update::Bool=true)
+@inline function Base.map!(@nospecialize(f), result::AbstractObservable, os...; update::Bool=true)
     # note: the @inline prevents de-specialization due to the splatting
-    obsfuncs = onany(os...) do args...
-        observable[] = Base.invokelatest(f, args...)
+    callback = MapCallback(f, result, os)
+    # appendinputs!(result, obsfuncs)
+    for o in os
+        o isa AbstractObservable && on(callback, o)
     end
-    appendinputs!(observable, obsfuncs)
-    if update
-        observable[] = f(map(to_value, os)...)
-    end
-    return observable
+    update && callback(nothing)
+    return result
 end
 
 function appendinputs!(@nospecialize(observable), obsfuncs::Vector{ObserverFunction})  # latency: separating this from map! allows dropping the specialization on `f`

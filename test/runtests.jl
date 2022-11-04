@@ -135,18 +135,23 @@ end
 end
 
 @testset "construct and show" begin
+    plain(x) = sprint(io-> show(io, MIME"text/plain"(), x))
     obs = Observable(5)
-    @test string(obs) == "Observable{$Int} with 0 listeners. Value:\n5"
+    @test string(obs) == "Observable(5)"
     f = on(identity, obs)
-    @test string(obs) == "Observable{$Int} with 1 listeners. Value:\n5"
-    @test string(f) == "ObserverFunction `identity` operating on Observable{Int64} with 1 listeners. Value:\n5"
+    @test occursin("Observable(5)\n    0 => identity(x) in Base at operators.jl", plain(obs))
+    @test string(f) == "ObserverFunction `identity` operating on Observable(5)"
     f = on(x->nothing, obs); ln = @__LINE__
-    @test string(obs) == "Observable{$Int} with 2 listeners. Value:\n5"
-    @test string(f) == "ObserverFunction defined at $(@__FILE__):$ln operating on Observable{Int64} with 2 listeners. Value:\n5"
+    str = plain(obs)
+    @test occursin("Observable(5)", str)
+    @test occursin("0 => identity(x) in Base at operators.jl", str)
+    @test occursin(" in Main at $(@__FILE__)", str)
+
+    @test string(f) == "ObserverFunction defined at $(@__FILE__):$ln operating on Observable(5)"
     obs[] = 7
-    @test string(obs) == "Observable{$Int} with 2 listeners. Value:\n7"
+    @test occursin("Observable(7)", plain(obs))
     obs = Observable{Any}()
-    @test string(obs) == "Observable{Any} with 0 listeners. Value:\nnot assigned yet!"
+    @test string(obs) == "Observable{Any}(#undef)"
 end
 
 @testset "listeners" begin
