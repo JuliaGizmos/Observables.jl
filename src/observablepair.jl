@@ -1,3 +1,9 @@
+"""
+    ObservablePair(first, second)
+
+Two observables trigger each other, but only in one direction
+as otherwise there will be an infinite loop of updates
+"""
 struct ObservablePair{S, T} <: AbstractObservable{T}
     first::AbstractObservable{S}
     second::AbstractObservable{T}
