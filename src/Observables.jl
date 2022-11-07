@@ -279,7 +279,7 @@ function Base.show(io::IO, obsf::ObserverFunction)
     io = IOContext(io, :compact => true)
     showdflt(io, @nospecialize(f), obs) = print(io, "ObserverFunction `", f, "` operating on ", obs)
 
-    nm = string(nameof(obsf.f))
+    nm = string(obsf.f) # 1.6 doesn't support nameof(some_struct), and also nameof(f) == Symbol(string(f))?
 
     if !occursin('#', nm)
         showdflt(io, obsf.f, obsf.observable)
