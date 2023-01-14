@@ -10,7 +10,7 @@ observable = Observable(0)
 observable[]
 ```
 
-But unlike `Ref`s,  but you can listen for changes:
+But unlike `Ref`s, you can listen for changes:
 
 ```@repl manual
 obs_func = on(observable) do val
