@@ -52,14 +52,6 @@ Gets a unique id for an observable.
 obsid(observable::Observable) = string(objectid(observable))
 obsid(obs::AbstractObservable) = obsid(observe(obs))
 
-function Base.getproperty(obs::Observable, field::Symbol)
-    if field === :id
-        return obsid(obs)
-    else
-        getfield(obs, field)
-    end
-end
-
 Observable(val::T; ignore_equal_values::Bool=false) where {T} = Observable{T}(val; ignore_equal_values)
 
 Base.eltype(::AbstractObservable{T}) where {T} = T
@@ -82,7 +74,7 @@ function Base.setindex!(@nospecialize(observable::Observable), @nospecialize(val
     if observable.ignore_equal_values
         isequal(observable.val, val) && return
     end
-    observable.val = val
+    setfield!(observable, :val, val)
     return notify(observable)
 end
 
@@ -95,6 +87,52 @@ setexcludinghandlers!(obs::AbstractObservable, val) = observe(obs).val = val
 Returns the current value of `observable`.
 """
 Base.getindex(observable::Observable) = observable.val
+
+# pass indexing and property methods to referenced variable
+# at least one index
+function Base.getindex(@nospecialize(obs::AbstractObservable), arg1, args...)
+    getindex(getfield(observe(obs), :val), arg1, args...)
+end
+
+function Base.setindex!(@nospecialize(obs::AbstractObservable), val, arg1, args...)
+    setindex!(getfield(observe(obs), :val), val, arg1, args...)
+    Observables.notify(obs)
+end
+
+# update without triggering listeners: obs[!] = val
+Base.setindex!(@nospecialize(obs::AbstractObservable), @nospecialize(val), ::typeof(!)) = setfield!(observe(obs), :val, val)
+Base.getindex(@nospecialize(obs::AbstractObservable), ::typeof(!)) = getfield(observe(obs), :val)
+
+function Base.getproperty(obs::T, field::Symbol) where T <: AbstractObservable
+    if field === :id
+        return obsid(obs)
+    elseif T !== Observable && field in fieldnames(T)
+        getfield(obs, field)
+    elseif field in fieldnames(Observable)
+        getfield(observe(obs), field)
+    else
+        getproperty(getfield(observe(obs), :val), field)
+    end
+end
+
+function Base.setproperty!(@nospecialize(obs::T), field::Symbol, @nospecialize(val)) where T <: AbstractObservable
+    if field in fieldnames(T)
+        setfield!(obs, field, val)
+    else
+        setproperty!(getfield(observe(obs), :val), field, val)
+    end
+    Observables.notify(obs)
+end
+
+for f in (:push!, :pushfirst!, :pop!, :popfirst!)
+    Core.eval(@__MODULE__, """
+    function Base.$f(@nospecialize(obs::AbstractObservable), @nospecialize(val))
+        $f(getfield(observe(obs), :val), val)
+        notify(obs)
+        getfield(observe(obs), :val)
+    end
+  """ |> Meta.parse)
+end
 
 ### Utilities
 
