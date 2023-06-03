@@ -2,6 +2,7 @@ module Observables
 
 export Observable, on, off, onany, connect!, obsid, async_latest, throttle
 export Consume, ObserverFunction, AbstractObservable
+export prepare_update!, execute_update!, @combine_updates
 
 import Base.Iterators.filter
 
@@ -22,6 +23,42 @@ abstract type AbstractObservable{T} end
 const addhandler_callbacks = []
 const removehandler_callbacks = []
 
+@enum CallbackState::Int8 begin
+    UPTODATE
+    CONSUMED
+    OUTOFDATE
+end
+
+struct Consume
+    x::Bool
+end
+Consume() = Consume(true)
+
+mutable struct Callback
+    const f::Any
+    state::CallbackState
+end
+Callback(f::Any) = Callback(f, UPTODATE)
+(cb::Callback)(val) = Base.invokelatest(cb.f, val)
+
+function update(cb::Callback, val)
+    if cb.state == UPTODATE # no need to update again
+        return false
+    elseif cb.state == CONSUMED # last update was blocking
+        return true
+    else
+        output = Base.invokelatest(cb.f, val)
+        if output isa Consume && output.x
+            cb.state = CONSUMED
+            return true
+        else
+            cb.state = UPTODATE
+            return false
+        end
+    end
+end
+
+
 """
     obs = Observable(val; ignore_equal_values=false)
     obs = Observable{T}(val; ignore_equal_values=false)
@@ -30,17 +67,16 @@ Like a `Ref`, but updates can be watched by adding a handler using [`on`](@ref) 
 Set `ignore_equal_values=true` to not trigger an event for `observable[] = new_value` if `isequal(observable[], new_value)`.
 """
 mutable struct Observable{T} <: AbstractObservable{T}
-
-    listeners::Vector{Pair{Int, Any}}
+    listeners::Vector{Pair{Int, Callback}}
     inputs::Vector{Any}  # for map!ed Observables
     ignore_equal_values::Bool
     val::T
 
     function Observable{T}(; ignore_equal_values::Bool=false) where {T}
-        return new{T}(Pair{Int, Any}[], [], ignore_equal_values)
+        return new{T}(Pair{Int, Callback}[], [], ignore_equal_values)
     end
     function Observable{T}(@nospecialize(val); ignore_equal_values::Bool=false) where {T}
-        return new{T}(Pair{Int, Any}[], [], ignore_equal_values, val)
+        return new{T}(Pair{Int, Callback}[], [], ignore_equal_values, val)
     end
 end
 
@@ -112,7 +148,7 @@ end
 
 
 # Optimized version of Base.searchsortedlast (optimized for our use case of pairs)
-function pair_searchsortedlast(values::Vector{Pair{Int, Any}}, prio::Int)::Int
+function pair_searchsortedlast(values::Vector{Pair{Int, Callback}}, prio::Int)::Int
     u = 1
     lo = 0
     hi = length(values) + u
@@ -128,9 +164,10 @@ function pair_searchsortedlast(values::Vector{Pair{Int, Any}}, prio::Int)::Int
 end
 
 function register_callback(@nospecialize(observable), priority::Int, @nospecialize(f))
-    ls = listeners(observable)::Vector{Pair{Int, Any}}
+    ls = listeners(observable)::Vector{Pair{Int, Callback}}
     idx = pair_searchsortedlast(ls, priority)
-    p = Pair{Int, Any}(priority, f) # faster than priority => f because of convert
+    # faster than priority => f because of convert
+    p = Pair{Int, Callback}(priority, Callback(f)) 
     insert!(ls, idx + 1, p)
     return
 end
@@ -152,11 +189,6 @@ Base.convert(::Type{T}, x) where {T<:Observable} = T(x)
 Base.convert(::Type{Observable{Any}}, x::AbstractObservable{Any}) = x
 Base.convert(::Type{Observables.Observable{Any}}, x::Observables.Observable{Any}) = x
 
-struct Consume
-    x::Bool
-end
-Consume() = Consume(true)
-
 """
     notify(observable::AbstractObservable)
 
@@ -165,14 +197,106 @@ Returns true if an event got consumed before notifying every listener.
 """
 function Base.notify(@nospecialize(observable::AbstractObservable))
     val = observable[]
-    for (_, f) in listeners(observable)::Vector{Pair{Int, Any}}
-        result = Base.invokelatest(f, val)
+    for (_, f) in listeners(observable)::Vector{Pair{Int, Callback}}
+        result = f(val)
         if result isa Consume && result.x
             # stop calling callbacks if event got consumed
             return true
         end
     end
     return false
+end
+
+# Handling "synchronized" updates
+"""
+    prepare_update!(observable, value)
+
+Sets `observable.val = value` and marks its listeners as `OUTOFDATE`. To run 
+the listeners, call `execute_update!(observable)`
+"""
+function prepare_update!(observable::Observable, val)
+    observable.val = val
+    for (_, cb) in listeners(observable)::Vector{Pair{Int, Callback}}
+        cb.state = OUTOFDATE
+    end
+    return
+end
+
+"""
+    execute_update!(observable::observable)
+
+Iterates through each listener of the observable. If the listener is marked as 
+`OUTOFDATE` it executes and updates its state to `CONSUMED` or `UPTODATE` 
+depending on the return type of the listener. Listeners marked as `UPTODATE` 
+are skipped and those marked as `CONSUMED` result in termination of the 
+iteration.
+"""
+function execute_update!(observable::Observable)
+    val = observable[]
+    for (_, cb) in listeners(observable)::Vector{Pair{Int, Callback}}
+        if update(cb, val)
+            # stop calling callbacks if event got consumed
+            return true
+        end
+    end
+    return false
+end
+
+"""
+    @combine_updates begin
+        obs1[] = val1
+        obs2[] = val2
+    end
+
+This macro delays the execution of listeners until the end of the enclosing 
+block. It also avoids executing the same listener multiple times if multiple
+enclosed observables trigger it.
+
+The code generated from the above example is
+    begin
+        prepare_update!(obs1, val1)
+        prepare_update!(obs2, val1)
+        execute_update!(obs1)
+        execute_update!(obs2)
+    end
+"""
+macro combine_updates(block::Expr)
+    observables = Symbol[]
+    if block.head != :block
+        error("Expression should be a begin ... end block.")
+    end
+    
+    println("---| Initial")
+    dump(block)
+    _replace_observable_update!.(block.args, (observables,))
+    
+    println("\n---| Replaced")
+    println("---| ", observables)
+    dump(block)
+    for name in unique(observables)
+        push!(block.args, :(Observables.execute_update!($name)))
+    end
+    
+    println("---| Finalized")
+    dump(block)
+    return esc(block)
+end
+
+_replace_observable_update!(::Any, ::Vector{Symbol}) = nothing
+function _replace_observable_update!(expr::Expr, observables::Vector{Symbol})
+    if expr.head == Symbol("=") && expr.args[1] isa Expr && expr.args[1].head == :ref
+        # keep track of observable
+        name = expr.args[1].args[1]
+        push!(observables, name)
+
+        # switch to prepare_update! call
+        expr.head = :call
+        expr.args[1] = :(Observables.prepare_update!)
+        insert!(expr.args, 2, name)
+    else
+        _replace_observable_update!.(expr.args, (observables,))
+    end
+    return
 end
 
 function print_value(io::IO, x::Observable{T}; print_listeners=false) where T
