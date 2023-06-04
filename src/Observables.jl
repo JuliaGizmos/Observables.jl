@@ -260,6 +260,7 @@ block. It also avoids executing the same listener multiple times if multiple
 enclosed observables trigger it.
 
 The code generated from the above example is
+
     begin
         prepare_update!(obs1, val1)
         prepare_update!(obs2, val1)
