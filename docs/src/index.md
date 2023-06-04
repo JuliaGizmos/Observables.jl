@@ -90,6 +90,30 @@ on(obs) do x
 end
 ```
 
+### Synchronous Updates
+
+If you have a function which combines the contents of multiple Observables you may want to update all of their contents before calling the attached function. A common example for this is broadcasting over array Observables.
+
+```julia
+input1 = Observable([1, 2])
+input2 = Observable([1, 2])
+output = map((a, b) -> tuple.(a, b), input1, input2)
+input1[] = [1, 2, 3]
+ERROR: DimensionMismatch: arrays could not be broadcast to a common size; got a dimension with lengths 3 and 2
+input2[] = [1, 2, 3]
+```
+
+After the second update `output` contains `[(1, 1), (2, 2), (3, 3)]` as it should, but it would be nice to avoid the intermediate update which errors. To do that the `@combine_updates` macro can be used.
+
+```julia
+@combine_updates begin
+    input1[] = [1, 2, 3, 4]
+    input2[] = [1, 2, 3, 4]
+end
+```
+
+This will update the observables in two steps. First, it will update content of each observable and mark every listener as out of date. Then it will go through all listeners and call the ones marked out of date, respecting priority and `Consume`. You can also do this manually with `prepare_update!(observable, value)` and `execute_update!(observable)`. 
+
 ### How is it different from Reactive.jl?
 
 The main difference is `Signal`s are manipulated mostly by converting one signal to another. For example, with signals, you can construct a changing UI by creating a `Signal` of UI objects and rendering them as the signal changes. On the other hand, you can use an Observable both as an input and an output. You can arbitrarily attach outputs to inputs allowing structuring code in a [signals-and-slots](http://doc.qt.io/qt-4.8/signalsandslots.html) kind of pattern.
