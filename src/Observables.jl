@@ -34,9 +34,16 @@ struct Consume
 end
 Consume() = Consume(true)
 
+if VERSION >= v"1.8.0"
 mutable struct Callback
     const f::Any
     state::CallbackState
+end
+else
+    mutable struct Callback
+        f::Any
+        state::CallbackState
+    end
 end
 Callback(f::Any) = Callback(f, UPTODATE)
 (cb::Callback)(val) = Base.invokelatest(cb.f, val)
