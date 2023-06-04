@@ -35,10 +35,10 @@ end
 Consume() = Consume(true)
 
 if VERSION >= v"1.8.0"
-mutable struct Callback
-    const f::Any
-    state::CallbackState
-end
+    mutable struct Callback
+        const f::Any
+        state::CallbackState
+    end
 else
     mutable struct Callback
         f::Any
@@ -273,19 +273,12 @@ macro combine_updates(block::Expr)
         error("Expression should be a begin ... end block.")
     end
     
-    println("---| Initial")
-    dump(block)
     _replace_observable_update!.(block.args, (observables,))
     
-    println("\n---| Replaced")
-    println("---| ", observables)
-    dump(block)
     for name in unique(observables)
         push!(block.args, :(Observables.execute_update!($name)))
     end
     
-    println("---| Finalized")
-    dump(block)
     return esc(block)
 end
 
