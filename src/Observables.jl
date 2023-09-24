@@ -509,12 +509,12 @@ Observable{Number}(1.7320508075688772)
 
 can handle any number type for which `sqrt` is defined.
 """
-@inline function Base.map!(@nospecialize(f), result::AbstractObservable, os...; update::Bool=true)
+@inline function Base.map!(@nospecialize(f), result::AbstractObservable, os...; update::Bool=true, priority = 0)
     # note: the @inline prevents de-specialization due to the splatting
     callback = MapCallback(f, result, os)
     # appendinputs!(result, obsfuncs)
     for o in os
-        o isa AbstractObservable && on(callback, o)
+        o isa AbstractObservable && on(callback, o, priority = priority)
     end
     update && callback(nothing)
     return result
@@ -559,10 +559,10 @@ julia> map(length, obs)
 Observable(3)
 ```
 """
-@inline function Base.map(f::F, arg1::AbstractObservable, args...; ignore_equal_values=false) where F
+@inline function Base.map(f::F, arg1::AbstractObservable, args...; ignore_equal_values=false, priority = 0) where F
     # note: the @inline prevents de-specialization due to the splatting
     obs = Observable(f(arg1[], map(to_value, args)...); ignore_equal_values=ignore_equal_values)
-    map!(f, obs, arg1, args...; update=false)
+    map!(f, obs, arg1, args...; update=false, priority = priority)
     return obs
 end
 
