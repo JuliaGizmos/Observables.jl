@@ -452,7 +452,7 @@ function clear(@nospecialize(obs::Observable))
 end
 
 """
-    onany(f, args...)
+    onany(f, args...; weak::Bool = false, priority::Int = 0, update::Bool = false)
 
 Calls `f` on updates to any observable refs in `args`.
 `args` may contain any number of `Observable` objects.
@@ -466,10 +466,11 @@ function onany(f, args...; weak::Bool = false, priority::Int = 0, update::Bool =
     obsfuncs = ObserverFunction[]
     for observable in args
         if observable isa AbstractObservable
-            obsfunc = on(callback, observable; weak=weak, priority=priority, update=update)
+            obsfunc = on(callback, observable; weak=weak, priority=priority)
             push!(obsfuncs, obsfunc)
         end
     end
+    update && callback(nothing)
     return obsfuncs
 end
 
