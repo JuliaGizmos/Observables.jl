@@ -461,12 +461,12 @@ All other objects in `args` are passed as-is.
 
 See also: [`on`](@ref).
 """
-function onany(f, args...; weak::Bool = false, priority::Int=0)
+function onany(f, args...; weak::Bool = false, priority::Int = 0, update::Bool = false)
     callback = OnAny(f, args)
     obsfuncs = ObserverFunction[]
     for observable in args
         if observable isa AbstractObservable
-            obsfunc = on(callback, observable; weak=weak, priority=priority)
+            obsfunc = on(callback, observable; weak=weak, priority=priority, update=update)
             push!(obsfuncs, obsfunc)
         end
     end
