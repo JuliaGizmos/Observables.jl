@@ -23,6 +23,40 @@ const addhandler_callbacks = []
 const removehandler_callbacks = []
 
 """
+    mutable struct ObserverFunction <: Function
+
+Fields:
+
+    f::Function
+    observable::AbstractObservable
+    weak::Bool
+
+`ObserverFunction` is intended as the return value for `on` because
+we can remove the created closure from `obsfunc.observable`'s listener vectors when
+ObserverFunction goes out of scope - as long as the `weak` flag is set.
+If the `weak` flag is not set, nothing happens
+when the ObserverFunction goes out of scope and it can be safely ignored.
+It can still be useful because it is easier to call `off(obsfunc)` instead of `off(observable, f)`
+to release the connection later.
+"""
+mutable struct ObserverFunction <: Function
+    f::Any
+    observable::AbstractObservable
+    weak::Bool
+
+    function ObserverFunction(@nospecialize(f), @nospecialize(observable::AbstractObservable), weak::Bool)
+        obsfunc = new(f, observable, weak)
+        # If the weak flag is set, deregister the function f from the observable
+        # storing it in its listeners once the ObserverFunction is garbage collected.
+        # This should free all resources associated with f unless there
+        # is another reference to it somewhere else.
+        weak && finalizer(off, obsfunc)
+        return obsfunc
+    end
+end
+
+
+"""
     obs = Observable(val; ignore_equal_values=false)
     obs = Observable{T}(val; ignore_equal_values=false)
 
@@ -30,9 +64,8 @@ Like a `Ref`, but updates can be watched by adding a handler using [`on`](@ref) 
 Set `ignore_equal_values=true` to not trigger an event for `observable[] = new_value` if `isequal(observable[], new_value)`.
 """
 mutable struct Observable{T} <: AbstractObservable{T}
-
     listeners::Vector{Pair{Int, Any}}
-    inputs::Vector{Any}  # for map!ed Observables
+    inputs::Vector{ObserverFunction}  # for map!ed Observables
     ignore_equal_values::Bool
     val::T
 
@@ -242,38 +275,6 @@ end
 
 Base.show(io::IO, ::MIME"application/prs.juno.inline", x::Observable) = x
 
-"""
-    mutable struct ObserverFunction <: Function
-
-Fields:
-
-    f::Function
-    observable::AbstractObservable
-    weak::Bool
-
-`ObserverFunction` is intended as the return value for `on` because
-we can remove the created closure from `obsfunc.observable`'s listener vectors when
-ObserverFunction goes out of scope - as long as the `weak` flag is set.
-If the `weak` flag is not set, nothing happens
-when the ObserverFunction goes out of scope and it can be safely ignored.
-It can still be useful because it is easier to call `off(obsfunc)` instead of `off(observable, f)`
-to release the connection later.
-"""
-mutable struct ObserverFunction <: Function
-    f::Any
-    observable::AbstractObservable
-    weak::Bool
-
-    function ObserverFunction(@nospecialize(f), @nospecialize(observable::AbstractObservable), weak::Bool)
-        obsfunc = new(f, observable, weak)
-        # If the weak flag is set, deregister the function f from the observable
-        # storing it in its listeners once the ObserverFunction is garbage collected.
-        # This should free all resources associated with f unless there
-        # is another reference to it somewhere else.
-        weak && finalizer(off, obsfunc)
-        return obsfunc
-    end
-end
 
 function Base.show(io::IO, obsf::ObserverFunction)
     io = IOContext(io, :compact => true)
@@ -513,20 +514,20 @@ can handle any number type for which `sqrt` is defined.
 @inline function Base.map!(@nospecialize(f), result::AbstractObservable, os...; update::Bool=true, priority::Int = 0)
     # note: the @inline prevents de-specialization due to the splatting
     callback = MapCallback(f, result, os)
-    # appendinputs!(result, obsfuncs)
+    obsfuncs = ObserverFunction[]
     for o in os
-        o isa AbstractObservable && on(callback, o, priority = priority)
+        if o isa AbstractObservable
+            obsfunc = on(callback, o, priority = priority)
+            push!(obsfuncs, obsfunc)
+        end
     end
+    appendinputs!(result, obsfuncs)
     update && callback(nothing)
     return result
 end
 
 function appendinputs!(@nospecialize(observable), obsfuncs::Vector{ObserverFunction})  # latency: separating this from map! allows dropping the specialization on `f`
-    if !isdefined(observable, :inputs)
-        observable.inputs = obsfuncs
-    else
-        append!(observable.inputs, obsfuncs)
-    end
+    append!(observable.inputs, obsfuncs)
     return observable
 end
 
