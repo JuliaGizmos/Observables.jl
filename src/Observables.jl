@@ -56,6 +56,8 @@ mutable struct ObserverFunction <: Function
 end
 
 
+const OBSID_COUNTER = Base.Threads.Atomic{UInt64}(UInt64(0))
+
 """
     obs = Observable(val; ignore_equal_values=false)
     obs = Observable{T}(val; ignore_equal_values=false)
@@ -67,13 +69,15 @@ mutable struct Observable{T} <: AbstractObservable{T}
     listeners::Vector{Pair{Int, Any}}
     inputs::Vector{ObserverFunction}  # for map!ed Observables
     ignore_equal_values::Bool
+    id::UInt64
     val::T
-
     function Observable{T}(; ignore_equal_values::Bool=false) where {T}
-        return new{T}(Pair{Int, Any}[], [], ignore_equal_values)
+        Base.Threads.atomic_add!(OBSID_COUNTER, UInt64(1))
+        return new{T}(Pair{Int,Any}[], [], ignore_equal_values, OBSID_COUNTER[])
     end
     function Observable{T}(@nospecialize(val); ignore_equal_values::Bool=false) where {T}
-        return new{T}(Pair{Int, Any}[], [], ignore_equal_values, val)
+        Base.Threads.atomic_add!(OBSID_COUNTER, UInt64(1))
+        return new{T}(Pair{Int,Any}[], [], ignore_equal_values, OBSID_COUNTER[], val)
     end
 end
 
@@ -82,14 +86,14 @@ end
 
 Gets a unique id for an observable.
 """
-obsid(observable::Observable) = string(objectid(observable))
+obsid(observable::Observable) = string(getfield(observable, :id))
 obsid(obs::AbstractObservable) = obsid(observe(obs))
 
 function Base.getproperty(obs::Observable, field::Symbol)
     if field === :id
         return obsid(obs)
     else
-        getfield(obs, field)
+        return getfield(obs, field)
     end
 end
 
@@ -462,7 +466,7 @@ All other objects in `args` are passed as-is.
 
 See also: [`on`](@ref).
 """
-function onany(f, args...; weak::Bool = false, priority::Int = 0, update::Bool = false)
+function onany(f, args...; weak::Bool=false, priority::Int=0, update::Bool = false)
     callback = OnAny(f, args)
     obsfuncs = ObserverFunction[]
     for observable in args
