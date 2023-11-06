@@ -452,7 +452,7 @@ function clear(@nospecialize(obs::Observable))
 end
 
 """
-    onany(f, args...)
+    onany(f, args...; weak::Bool = false, priority::Int = 0, update::Bool = false)
 
 Calls `f` on updates to any observable refs in `args`.
 `args` may contain any number of `Observable` objects.
@@ -461,7 +461,7 @@ All other objects in `args` are passed as-is.
 
 See also: [`on`](@ref).
 """
-function onany(f, args...; weak::Bool = false, priority::Int=0)
+function onany(f, args...; weak::Bool = false, priority::Int = 0, update::Bool = false)
     callback = OnAny(f, args)
     obsfuncs = ObserverFunction[]
     for observable in args
@@ -470,6 +470,7 @@ function onany(f, args...; weak::Bool = false, priority::Int=0)
             push!(obsfuncs, obsfunc)
         end
     end
+    update && callback(nothing)
     return obsfuncs
 end
 
@@ -509,12 +510,12 @@ Observable{Number}(1.7320508075688772)
 
 can handle any number type for which `sqrt` is defined.
 """
-@inline function Base.map!(@nospecialize(f), result::AbstractObservable, os...; update::Bool=true)
+@inline function Base.map!(@nospecialize(f), result::AbstractObservable, os...; update::Bool=true, priority::Int = 0)
     # note: the @inline prevents de-specialization due to the splatting
     callback = MapCallback(f, result, os)
     # appendinputs!(result, obsfuncs)
     for o in os
-        o isa AbstractObservable && on(callback, o)
+        o isa AbstractObservable && on(callback, o, priority = priority)
     end
     update && callback(nothing)
     return result
@@ -559,10 +560,10 @@ julia> map(length, obs)
 Observable(3)
 ```
 """
-@inline function Base.map(f::F, arg1::AbstractObservable, args...; ignore_equal_values=false) where F
+@inline function Base.map(f::F, arg1::AbstractObservable, args...; ignore_equal_values::Bool=false, priority::Int = 0) where F
     # note: the @inline prevents de-specialization due to the splatting
     obs = Observable(f(arg1[], map(to_value, args)...); ignore_equal_values=ignore_equal_values)
-    map!(f, obs, arg1, args...; update=false)
+    map!(f, obs, arg1, args...; update=false, priority = priority)
     return obs
 end
 
