@@ -10,6 +10,16 @@ using Test
     @test y[] == 1
 end
 
+@testset "onany(f; update=true)" begin
+    obs = Observable(0)
+    obs2 = Observable(1)
+    y = Observable(0)
+    onany(obs, obs2; update=true) do x
+        y[] += 1
+    end
+    @test y[] == 1
+end
+
 @testset "Observable with Priority" begin
     po = Observable(0)
 
