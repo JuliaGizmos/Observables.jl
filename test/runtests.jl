@@ -14,7 +14,7 @@ end
     obs = Observable(0)
     obs2 = Observable(1)
     y = Observable(0)
-    onany(obs, obs2; update=true) do x, y
+    onany(obs, obs2; update=true) do x, _
         y[] += 1
     end
     @test y[] == 1
