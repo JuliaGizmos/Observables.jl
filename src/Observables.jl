@@ -39,13 +39,13 @@ when the ObserverFunction goes out of scope and it can be safely ignored.
 It can still be useful because it is easier to call `off(obsfunc)` instead of `off(observable, f)`
 to release the connection later.
 """
-mutable struct ObserverFunction <: Function
-    f::Any
-    observable::AbstractObservable
+mutable struct ObserverFunction{F, O<:AbstractObservable} <: Function
+    f::F
+    observable::O
     weak::Bool
 
-    function ObserverFunction(@nospecialize(f), @nospecialize(observable::AbstractObservable), weak::Bool)
-        obsfunc = new(f, observable, weak)
+    function ObserverFunction(f::F, observable::O, weak::Bool) where {F, O<:AbstractObservable}
+        obsfunc = new{F,O}(f, observable, weak)
         # If the weak flag is set, deregister the function f from the observable
         # storing it in its listeners once the ObserverFunction is garbage collected.
         # This should free all resources associated with f unless there
@@ -426,14 +426,14 @@ function show_callback(io::IO, onany::OnAny, @nospecialize(argtype))
     print(io, ")")
 end
 
-struct MapCallback <: Function
-    f::Any
-    result::Observable
-    args::Any
+struct MapCallback{F,O<:Observable,A} <: Function
+    f::F
+    result::O
+    args::A
 end
 
-function (mc::MapCallback)(@nospecialize(value))
-    mc.result[] = Base.invokelatest(mc.f, map(to_value, mc.args)...)
+function (mc::MapCallback)(value)
+    mc.result[] = mc.f(map(to_value, mc.args)...)
     return
 end
 
