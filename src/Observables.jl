@@ -545,7 +545,7 @@ See also [`Observables.ObservablePair`](@ref).
 connect!(o1::AbstractObservable, o2::AbstractObservable) = on(x-> o1[] = x, o2; update=true)
 
 """
-    obs = map(f, arg1::AbstractObservable, args...; ignore_equal_values=false)
+    obs = map(f, arg1::AbstractObservable, args...; ignore_equal_values=false, out_type=:first_eval)
 
 Creates a new observable `obs` which contains the result of `f` applied to values
 extracted from `arg1` and `args` (i.e., `f(arg1[], ...)`.
@@ -564,10 +564,51 @@ julia> obs = Observable([1,2,3]);
 julia> map(length, obs)
 Observable(3)
 ```
+
+# Specifying the element type
+
+The element type (eltype) of the new observable `obs` is determined by the `out_type` kwarg. If
+`out_type = :first_eval` (default), then it'll be whatever type is returned the first time `f` is
+called.
+
+```jldoctest; setup=:(using Observables)
+julia> o1 = Observable{Union{Int, Float64}}(1);
+
+julia> eltype(map(x -> x + 1, o1))
+Int
+```
+
+If `out_type = :infer`, we'll use type inference to determine the eltype:
+```jldoctest; setup=:(using Observables; o1 = Observable{Union{Int, Float64}}(1))
+julia> eltype(map(x -> x + 1, o1; out_type=:infer))
+Union{Int, Float64}
+```
+
+If you use the `:infer` option, then the eltype of `obs` should be considered an implementation
+detail that cannot be relied upon and may end up returning `Any` depending on opaque compiler
+heuristics.
+
+Finally, if `out_type` isa `Type`, then that type is the unconditional `eltype` of `obs`
+
+```jldoctest setup=:(using Observables; o1 = Observable{Union{Int, Float64}}(1))
+julia> eltype(map(x -> x + 1, o1; out_type=Real))
+Real
+```
 """
-@inline function Base.map(f::F, arg1::AbstractObservable, args...; ignore_equal_values::Bool=false, priority::Int = 0) where F
+@inline function Base.map(f::F, arg1::AbstractObservable, args...; ignore_equal_values::Bool=false, priority::Int = 0, out_type=:first_eval) where F
+    if out_type === :first_eval
+        Obs = Observable
+    elseif out_type === :infer
+        RT = Core.Compiler.return_type(f, Tuple{eltype(arg1), eltype.(args)...})
+        Obs = Observable{RT}
+    elseif out_type isa Type
+        Obs = Observable{out_type}
+    else
+        msg = "Got an invalid input for the out_type keyword argument, expected either a type, `:first_eval`, or `:infer`, got " * repr(out_type)
+        error(ArgumentError(msg))
+    end
     # note: the @inline prevents de-specialization due to the splatting
-    obs = Observable(f(arg1[], map(to_value, args)...); ignore_equal_values=ignore_equal_values)
+    obs = Obs(f(arg1[], map(to_value, args)...); ignore_equal_values=ignore_equal_values)
     map!(f, obs, arg1, args...; update=false, priority = priority)
     return obs
 end

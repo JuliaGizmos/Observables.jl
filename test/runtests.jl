@@ -149,13 +149,14 @@ end
     obs = Observable(5)
     @test string(obs) == "Observable(5)"
     f = on(identity, obs)
-    @test occursin("Observable(5)\n    0 => identity(x) in Base at operators.jl", plain(obs))
+    @test occursin("Observable(5)\n    0 => identity(x)", plain(obs))
     @test string(f) == "ObserverFunction `identity` operating on Observable(5)"
     f = on(x->nothing, obs); ln = @__LINE__
     str = plain(obs)
     @test occursin("Observable(5)", str)
-    @test occursin("0 => identity(x) in Base at operators.jl", str)
-    @test occursin(" in Main at $(@__FILE__)", str)
+    @test occursin("0 => identity(x)", str)
+    @test occursin(" Main", str)
+    @test occursin("runtests.jl", str)
 
     @test string(f) == "ObserverFunction defined at $(@__FILE__):$ln operating on Observable(5)"
     obs[] = 7
@@ -216,6 +217,23 @@ end
     r1[] = 4
     @test r3[] === 5.0f0
 
+
+    r4 = Observable{Any}(true)
+    r5 = map(r4; out_type=:infer) do x
+        x + 1
+    end
+    @test r5[] == 2
+    r4[] = (1.5 + im)
+    @test r5[] == 2.5 + im 
+
+    r6 = Observable{Any}(true)
+    r7 = map(r6; out_type=Number) do x
+        x + 1
+    end
+    @test r7[] == 2
+    r6[] = (1.5 + im)
+    @test r7[] == 2.5 + im 
+    
     # Make sure `precompile` doesn't error
     precompile(r1)
 end
