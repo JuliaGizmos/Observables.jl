@@ -55,9 +55,7 @@ mutable struct ObserverFunction <: Function
     end
 end
 
-
-const OBSID_COUNTER = Base.Threads.Atomic{UInt64}(UInt64(0))
-
+const OBSID_COUNTER = Threads.Atomic{UInt64}(UInt64(0))
 """
     obs = Observable(val; ignore_equal_values=false)
     obs = Observable{T}(val; ignore_equal_values=false)
@@ -72,12 +70,14 @@ mutable struct Observable{T} <: AbstractObservable{T}
     id::UInt64
     val::T
     function Observable{T}(; ignore_equal_values::Bool=false) where {T}
-        Base.Threads.atomic_add!(OBSID_COUNTER, UInt64(1))
-        return new{T}(Pair{Int,Any}[], [], ignore_equal_values, OBSID_COUNTER[])
+        old = Threads.atomic_add!(OBSID_COUNTER, UInt64(1))
+        x = new{T}(Pair{Int,Any}[], [], ignore_equal_values, old)
+        return x
     end
     function Observable{T}(@nospecialize(val); ignore_equal_values::Bool=false) where {T}
-        Base.Threads.atomic_add!(OBSID_COUNTER, UInt64(1))
-        return new{T}(Pair{Int,Any}[], [], ignore_equal_values, OBSID_COUNTER[], val)
+        old = Threads.atomic_add!(OBSID_COUNTER, UInt64(1))
+        x = new{T}(Pair{Int,Any}[], [], ignore_equal_values, old, val)
+        return x
     end
 end
 
