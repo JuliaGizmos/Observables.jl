@@ -27,9 +27,9 @@ const removehandler_callbacks = []
 
 Fields:
 
-    f::Function
-    observable::AbstractObservable
-    weak::Bool
+- `f::Function`
+- `observable::AbstractObservable`
+- `weak::Bool`
 
 `ObserverFunction` is intended as the return value for `on` because
 we can remove the created closure from `obsfunc.observable`'s listener vectors when
