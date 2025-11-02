@@ -320,7 +320,7 @@ observable connections are removed automatically.
 
 # Example
 
-```julia
+```julia-repl
 julia> obs = Observable(0)
 Observable(0)
 
@@ -328,6 +328,7 @@ julia> on(obs) do val
            println("current value is ", val)
        end
 ObserverFunction defined at REPL[17]:2 operating on Observable(0)
+
 julia> obs[] = 5;
 current value is 5
 ```
@@ -336,24 +337,27 @@ One can also give the callback a priority, to enable always calling a specific c
 The callback with the highest priority gets called first, the default is zero, and the whole range of Int can be used.
 So one can do:
 
-```julia
+```julia-repl
 julia> obs = Observable(0)
+
 julia> on(obs; priority=-1) do x
            println("Hi from first added")
        end
+
 julia> on(obs) do x
            println("Hi from second added")
        end
+
 julia> obs[] = 2
 Hi from second added
 Hi from first added
 ```
 
 If you set `update=true`, on will call f(obs[]) immediately:
-```julia
+```julia-repl
 julia> on(Observable(1); update=true) do x
-    println("hi")
-end
+           println("hi")
+       end
 hi
 ```
 
@@ -586,7 +590,7 @@ compute. The plot will directly compute the last frame
 skipping the intermediate ones.
 
 # Example:
-```
+```julia
 observable = Observable(0)
 function compute_something(x)
     for i=1:10^8 rand() end # simulate something expensive
