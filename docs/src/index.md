@@ -48,7 +48,8 @@ obs_func = nothing
 One can also give the callback a priority, to enable always calling a specific callback before/after others, independent of the order of registration.
 So one can do:
 
-```julia
+```@repl
+using Observables # hide
 obs = Observable(0)
 on(obs; priority=-1) do x
     println("Hi from first added")
@@ -57,13 +58,12 @@ on(obs) do x
     println("Hi from second added")
 end
 obs[] = 2
-Hi from second added
-Hi from first added
 ```
 Without the priority, the printing order would be the other way around.
 One can also return `Consume(true/false)`, to consume an event and stop any later callback from getting called.
 
-```julia
+```@repl
+using Observables # hide
 obs = Observable(0)
 on(obs) do x
     if x == 1
@@ -77,10 +77,7 @@ on(obs) do x
     println("I get called")
 end
 obs[] = 2
-Do not consume!
-I get called
 obs[] = 1
-stop calling callbacks after me!
 ```
 
 The first one could of course also be written as:
