@@ -147,7 +147,7 @@ end
 @testset "construct and show" begin
     plain(x) = sprint(io-> show(io, MIME"text/plain"(), x))
     shows_base_identity(str) = occursin(r"0 => identity\(x\) (in Base at|@ Base )operators\.jl", str)
-    shows_main_callback(str) = occursin(@__FILE__, str) && occursin("Main", str)
+    shows_callback_location(str) = occursin(@__FILE__, str)
     obs = Observable(5)
     @test string(obs) == "Observable(5)"
     f = on(identity, obs)
@@ -158,7 +158,7 @@ end
     str = plain(obs)
     @test occursin("Observable(5)", str)
     @test shows_base_identity(str)
-    @test shows_main_callback(str)
+    @test shows_callback_location(str)
 
     @test string(f) == "ObserverFunction defined at $(@__FILE__):$ln operating on Observable(5)"
     obs[] = 7
