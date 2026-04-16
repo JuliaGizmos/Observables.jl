@@ -146,16 +146,19 @@ end
 
 @testset "construct and show" begin
     plain(x) = sprint(io-> show(io, MIME"text/plain"(), x))
+    shows_base_identity(str) = occursin(r"0 => identity\(x\) (in Base at|@ Base )operators\.jl", str)
+    shows_main_callback(str) = occursin(@__FILE__, str) && occursin("Main", str)
     obs = Observable(5)
     @test string(obs) == "Observable(5)"
     f = on(identity, obs)
-    @test occursin("Observable(5)\n    0 => identity(x) in Base at operators.jl", plain(obs))
+    @test occursin("Observable(5)", plain(obs))
+    @test shows_base_identity(plain(obs))
     @test string(f) == "ObserverFunction `identity` operating on Observable(5)"
     f = on(x->nothing, obs); ln = @__LINE__
     str = plain(obs)
     @test occursin("Observable(5)", str)
-    @test occursin("0 => identity(x) in Base at operators.jl", str)
-    @test occursin(" in Main at $(@__FILE__)", str)
+    @test shows_base_identity(str)
+    @test shows_main_callback(str)
 
     @test string(f) == "ObserverFunction defined at $(@__FILE__):$ln operating on Observable(5)"
     obs[] = 7
@@ -465,6 +468,7 @@ end
 
 @testset "methodlist" begin
     _only(list) = (@assert length(list) == 1; return list[1])  # `only` is avail in Julia 1.4+
+    methodlist_name(list) = hasproperty(list, :mt) ? list.mt.name : list.tn.name
     obs = Observable(1)
     obsf = on(obs) do x
         x + 1
@@ -489,5 +493,5 @@ end
     # m = _only(Observables.methodlist(obsf2).ms)
     # @test occursin("runtests.jl:$line3", string(m))
     obsf3 = on(sqrt, obs)
-    @test Observables.methodlist(obsf3).mt.name === :sqrt
+    @test occursin("sqrt", string(methodlist_name(Observables.methodlist(obsf3))))
 end

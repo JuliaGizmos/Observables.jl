@@ -651,7 +651,7 @@ include("macros.jl")
 
 # Look up the source location of `do` block Observable MethodInstances
 function methodlist(@nospecialize(ft::Type))
-    return Base.MethodList(ft.name.mt)
+    return methods(ft.instance)
 end
 
 methodlist(mi::Core.MethodInstance) = methodlist(Base.unwrap_unionall(mi.specTypes).parameters[1])
