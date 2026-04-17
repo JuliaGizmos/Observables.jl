@@ -1,6 +1,6 @@
 module Observables
 
-export Observable, on, off, onany, connect!, obsid, async_latest, throttle
+export Observable, on, off, onany, connect!, obsid, async_latest, throttle, changes
 export Consume, ObserverFunction, AbstractObservable
 
 import Base.Iterators.filter
@@ -574,6 +574,23 @@ Observable(3)
     obs = Observable(f(arg1[], map(to_value, args)...); ignore_equal_values=ignore_equal_values)
     map!(f, obs, arg1, args...; update=false, priority = priority)
     return obs
+end
+
+"""
+     changes(obs)
+
+Returns an `Observable` that only forwards `obs` updates when its value changes.
+"""
+function changes(obs::AbstractObservable{T}) where {T}
+	result = Observable{T}(obs[])
+    oldobs = Observable{T}(obs[])
+	on(obs) do val
+		if val != oldobs[]
+			result[] = val
+			oldobs[] = val
+		end
+	end
+	return result
 end
 
 
