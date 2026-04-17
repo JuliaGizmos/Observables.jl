@@ -147,7 +147,7 @@ end
 @testset "construct and show" begin
     plain(x) = sprint(io-> show(io, MIME"text/plain"(), x))
     shows_base_identity(str) = occursin(r"0 => identity\(x\) (in Base at|@ Base )operators\.jl", str)
-    shows_callback_location(str) = occursin(@__FILE__, str)
+    shows_callback_location(str) = occursin(@__FILE__, str) || occursin(Base.contractuser(@__FILE__), str)
     obs = Observable(5)
     @test string(obs) == "Observable(5)"
     f = on(identity, obs)
